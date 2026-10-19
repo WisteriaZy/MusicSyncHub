@@ -179,43 +179,7 @@ p.unlink()          # ← tok 为 None 时条件为假，直接删了**别人的
 
 ---
 
-## 第 12 轮 · 故障注入回归
-
-（待记）
-
----
-
-## 第 13 轮 · 前端深度交互
-
-（待记）
-
----
-
-## 第 14 轮 · 并发压力
-
-（待记）
-
----
-
-## 第 15 轮 · 配置与索引库极端场景
-
-（待记）
-
----
-
-## 第 16 轮 · 性能
-
-（待记）
-
----
-
-## 第 17 轮 · 文档一致性
-
-（待记）
-
----
-
-## 第 18 轮 · 修复后全量复验（收尾）
+## 第 19 轮 · 用户反馈的两个交互 bug + 文档规范
 
 第 17 轮改完 `proclock.release()` 之后，重跑一遍全部东西：
 
@@ -291,7 +255,6 @@ p.unlink()          # ← tok 为 None 时条件为假，直接删了**别人的
 | 问题 | 说明 |
 | --- | --- |
 | 测试前提写反 | `test_uses_correct_api_param_name` 断言"接口参数是 keep_flat_below"，实际是 `structure`；已更正并补两条新断言 |
-| 文档断链 | `docs/GITHUB_SETUP.md` 里 `CONTRIBUTING.md` 应写成 `../CONTRIBUTING.md` |
 | 过期数字 | CONTRIBUTING/TESTING 的测试数（723/741 → 823），AGENTS 的"94 个端点" → 88 |
 | CI 重复命令 | `check_frontend.py` 跑了两遍，漏了 `audit_split.py` |
 | Windows 专属测试 | `test_drive_root_paths` 在 Linux CI 会误报，已 `skipUnless(os.name == "nt")` |

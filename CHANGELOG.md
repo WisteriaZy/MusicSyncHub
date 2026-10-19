@@ -6,7 +6,7 @@
 
 ### 修复：安全审查 Critical/High 级问题（2026-10-19）
 
-基于 Agent 深度审查报告 `docs/SECURITY_AUDIT_AGENT_2026-10-19.md`，修复 3 个 Critical 和 2 个 High 级问题。详见 `docs/FIXES_2026-10-19.md`。
+基于安全审查报告 `docs/SECURITY_REVIEW_2026-10-19.md`，修复 3 个 Critical 和 2 个 High 级问题。
 
 **Critical 级（数据安全）**：
 - **C1**: 跨进程锁释放逻辑错误 — 空字符串 token 误释放其他进程的锁 → 精确匹配 `|token|`
@@ -446,9 +446,8 @@ CRITICAL。**全部属实**，且 CRITICAL 都是我自己上一轮引入的。
 
 - 新增 [`docs/FEATURE_TREE.md`](docs/FEATURE_TREE.md)（功能关系树：页面→功能→接口）
   与 [`docs/LOGIC_TREE.md`](docs/LOGIC_TREE.md)（逻辑关系树：写操作链路、状态位置、不变量）。
-- `README.md` 文档索引补上上述两篇 + `AUDIT_ROUNDS.md` + `GITHUB_SETUP.md`。
+- `README.md` 文档索引补上上述两篇 + `AUDIT_ROUNDS.md`。
 - `docs/USER_GUIDE.md`：更新播放语义（播放 vs 加入播放列表）与候选区智能分配流程。
-- `docs/GITHUB_SETUP.md`：发布前检查清单加入 `tools/audit_split.py`。
 - `.github/workflows/tests.yml`：去掉重复的 `check_frontend`，补上 `audit_split`。
 
 ### 测试（2026-10-18）
@@ -830,7 +829,6 @@ CRITICAL。**全部属实**，且 CRITICAL 都是我自己上一轮引入的。
 - **`app/main.py` 顶部导航索引**：49 个路由按功能分组列出 + 模块级状态说明。
   配套测试 `tests/test_docstring_index.py` 守住索引不腐烂（缺路由/多路由/幽灵函数名都会红），
   并额外检查"静态路径必须排在带参路由之前"（FastAPI 按注册顺序匹配）
-- **`docs/GITHUB_SETUP.md`**：推送步骤 + 提交前必查清单
 - **测试包水印**：`MSH_TEST_MODE=1` → 顶部横幅 + 右下角 TEST 角标 + `/api/system.test_mode`
 - **`run-test.py`**：测试包启动器（包内演示库、包内数据目录、自动扫描、开浏览器）
 - **`tools/build_packages.py`**：一键打 AI 审查包 / 测试包

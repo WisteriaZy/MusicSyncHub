@@ -329,7 +329,7 @@ node tools/cdp_vp.js 9224 http://127.0.0.1:8787/ 20000 <probe.js> 1500 <screensh
 ### Process & History
 
 - [docs/AUDIT_ROUNDS.md](docs/AUDIT_ROUNDS.md) — Multi-round systematic reviews
-- [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) — Publishing steps + pre-push checklist
+- [docs/SECURITY_REVIEW_2026-10-19.md](docs/SECURITY_REVIEW_2026-10-19.md) — Security audit record (2026-10-19)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Environment, constraints, commit conventions
 - [CHANGELOG.md](CHANGELOG.md) — Change log
 

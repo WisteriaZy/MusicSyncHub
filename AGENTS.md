@@ -587,7 +587,7 @@ node tools/cdp_vp.js 9224 http://127.0.0.1:8787/ 20000 <探测脚本.js> 1500 <�
 | `docs/FEATURE_TREE.md` | 所有人 | **功能关系树**：页面 → 功能 → 接口，一张表看懂"能做什么" |
 | `docs/LOGIC_TREE.md` | 改代码的人 | **逻辑关系树**：写操作链路、互斥闸门、状态位置、10 条不变量 |
 | `docs/AUDIT_ROUNDS.md` | 维护者 | 多轮地毯式排查记录：每轮角度、证据、修了什么、哪些是假阳性 |
-| `docs/GITHUB_SETUP.md` | 维护者 | 推送到 GitHub 的步骤与检查清单 |
+| `docs/SECURITY_REVIEW_2026-10-19.md` | 维护者 | 安全审查记录：已修问题、误报核实、维护建议 |
 | `CONTRIBUTING.md` | 贡献者 | 环境、硬约束摘要、提交规范 |
 | `CHANGELOG.md` | 所有人 | 改了什么 |
 | `README.md` / `QUICKSTART.md` | 路过的人 | 简介 / 5 分钟上手 |
