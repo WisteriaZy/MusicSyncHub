@@ -10,6 +10,8 @@
 
 [Features](#features) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Screenshots](#screenshots) • [Contributing](#contributing)
 
+English | [简体中文](README.zh-CN.md)
+
 </div>
 
 ---
