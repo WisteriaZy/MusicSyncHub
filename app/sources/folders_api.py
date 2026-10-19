@@ -159,8 +159,10 @@ def create_folder(payload: Dict[str, Any] = Body(...), job=Depends(exclusive_slo
         raise HTTPException(400, "缺少 source")
     if not name:
         raise HTTPException(400, "缺少目录名")
-    if any(ch in name for ch in '\\/:*?"<>|'):
-        raise HTTPException(400, '目录名不能包含 \\ / : * ? " < > |')
+    # 原来只挡了 \ / : * ? " < > |，CON / NUL / 尾随点空格全能建出来
+    _bad = P.name_problem(name)
+    if _bad:
+        raise HTTPException(400, _bad)
     parent = _norm_dir(as_text(payload, "parent", "上级目录"))
     src, parent_abs, root = _inside(sid, parent)
     _guard_write(src)
@@ -187,8 +189,10 @@ def rename_folder(payload: Dict[str, Any] = Body(...), job=Depends(exclusive_slo
         raise HTTPException(400, "缺少 source / path")
     if not new_name:
         raise HTTPException(400, "缺少新目录名")
-    if any(ch in new_name for ch in '\\/:*?"<>|'):
-        raise HTTPException(400, '目录名不能包含 \\ / : * ? " < > |')
+    # 改名成 nul 会让 shutil.move 逐个文件 WinError 3、搬到一半停住
+    _bad = P.name_problem(new_name)
+    if _bad:
+        raise HTTPException(400, _bad)
 
     src, cur_abs, root = _resolve(sid, path)
     _guard_write(src)
@@ -209,7 +213,8 @@ def rename_folder(payload: Dict[str, Any] = Body(...), job=Depends(exclusive_slo
                 "moved": False, "indexed": 0}
     if not (target == root or target.startswith(root.rstrip("/") + "/")):
         raise HTTPException(400, "目标路径超出数据源根目录，已拒绝")
-    if src.exists(target):
+    # 只改大小写（Album → album）时"已存在"的就是它自己，不算冲突
+    if src.exists(target) and not src.same_entry(cur_abs, target):
         raise HTTPException(409, f"目标已存在: {new_name}")
 
     try:

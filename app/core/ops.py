@@ -624,6 +624,11 @@ class Executor:
                     out.update(state="blocked", error_kind=ERR_READONLY,
                                detail=f"目标源 {st.get('dst')} 只读，无法写入")
                     return out
+                # 预演必须和执行同一套判断：执行会拒的名字，预演不能说"将复制"
+                bad = _guard_target_name(dst, st.get("dst_path") or "", "复制") if dst else None
+                if bad:
+                    out.update(bad)
+                    return out
                 ap = dst.abs_path(st.get("dst_path") or "") if dst else ""
                 exists = bool(dst and dst.exists(ap))
                 out["detail"] = "目标文件已存在" if exists else "将复制"
@@ -640,6 +645,10 @@ class Executor:
                 if src is not None and not src.can_write:
                     out.update(state="blocked", error_kind=ERR_READONLY,
                                detail="源只读，无法重命名")
+                    return out
+                bad = _guard_target_name(src, st.get("dst_path") or "", "重命名") if src else None
+                if bad:
+                    out.update(bad)
                     return out
                 out["detail"] = f"{P.basename(st.get('src_path') or '')} → {P.basename(st.get('dst_path') or '')}"
             elif op == "move":
@@ -717,6 +726,10 @@ class Executor:
         dst = self.sources.get(st.get("dst"))
         if src is None or dst is None:
             return {"state": "error", "detail": "数据源不存在"}
+        # 目标名不合法时**源还没动**，直接拒绝最安全（transfer 会删源）
+        bad = _guard_target_name(dst, st.get("dst_path") or "", "搬运")
+        if bad:
+            return bad
         # ★ 先认领目标（和 `_do_copy` 一样）：同方案里如果有更早的步骤
         #   要写这个路径，改个不冲突的名字，而不是覆盖掉它。
         #   只把 op 加进 `_reserve_targets` 是不够的 —— 那里只是**标记**
@@ -779,7 +792,8 @@ class Executor:
         bad = _guard_inside(src, src_path, "复制（源）")
         if bad:
             return bad
-        bad = _guard_inside(dst, dst_rel, "复制（目标）")
+        bad = _guard_inside(dst, dst_rel, "复制（目标）") \
+            or _guard_target_name(dst, dst_rel, "复制")
         if bad:
             return bad
         dst_path = dst.abs_path(dst_rel)
@@ -924,6 +938,16 @@ class Executor:
             bad = _guard_inside(src, _p, _what)
             if bad:
                 return bad
+        bad = _guard_target_name(src, want, "重命名")
+        if bad:
+            return bad
+        # ★ 只改大小写（`Song.mp3` → `song.mp3`）必须在**任何冲突处理之前**短路。
+        #   大小写不敏感的盘上 `exists("song.mp3")` 为真，而那个"已存在的目标"
+        #   就是源文件自己：skip 会说"已存在"、rename 会改成 `song (2).mp3`，
+        #   overwrite 更糟 —— 先把"目标"移进回收站，实际移走的是**源文件本身**。
+        if src.same_entry(cur, want):
+            src.replace(cur, want)
+            return {"state": "done", "detail": "已重命名（仅大小写）", "target": want}
         # ★ 重命名也要在锁内认领目标名。
         #   原来这里完全没有 `_claim_target`，直接调裸 `_dedupe_name`：
         #   同一方案里多条 rename 指向同一个名字时，两个线程都算出
@@ -979,6 +1003,12 @@ class Executor:
             return {"state": "error", "detail": "源文件不存在（可能已被移动）"}
         if st_cur.is_dir:
             return {"state": "error", "detail": "源路径是目录"}
+        # ★ 只改大小写：目标"已存在"的就是源自己（见 `_do_rename` 同名注释）。
+        #   不短路的话 overwrite 会先把"目标"移进回收站 —— 移走的正是源文件。
+        if src.same_entry(cur, want):
+            src.replace(cur, want)
+            return {"state": "done", "detail": "已移动（仅大小写）", "target": want,
+                    "bytes": st_cur.size or 0}
         st_want = src.stat(want)
         if st_want is not None and st_want.is_dir:
             # 目标是个目录：硬来只会让 os.replace 报难懂的错，或者把文件改名成 "目录 (2)"
@@ -1250,6 +1280,25 @@ def _guard_inside(src: MusicSource, path: str, what: str) -> Optional[Dict[str, 
     return None
 
 
+def _guard_target_name(src: MusicSource, path: str, what: str) -> Optional[Dict[str, Any]]:
+    """**写入目标**的命名检查（CON / NUL / 尾随点空格 / 非法字符）。合法返回 None。
+
+    只用在"要新建的名字"上，**不用在源路径上**：库里可能已经有名字奇怪的
+    老文件，挡住它们就没法把它们移走/改好名了。
+
+    只检查根目录之下的那几段（根本身的写法是用户配置的，不归这里管）。
+    """
+    try:
+        rel = src.rel_path(src.abs_path(path))
+    except Exception:                             # noqa: BLE001
+        rel = path
+    msg = P.path_problem(rel)
+    if msg:
+        return {"state": "error", "detail": f"目标名不合法，已拒绝{what}：{msg}",
+                "dst": path}
+    return None
+
+
 def _resolve_move(src: MusicSource, st: Dict[str, Any]) -> Tuple[str, str, Optional[Dict[str, Any]]]:
     """移动步骤的公共前置检查，返回 (源路径, 目标路径, 错误结果)。
 
@@ -1282,6 +1331,10 @@ def _resolve_move(src: MusicSource, st: Dict[str, Any]) -> Tuple[str, str, Optio
     cur_abs, want_abs = _expand(cur), _expand(want)
     if not (_inside_root(src, cur_abs) and _inside_root(src, want_abs)):
         return "", "", {"state": "error", "detail": "路径超出数据源根目录，已拒绝移动"}
+    # 目标目录/文件名里有 NUL 之类：mkdirs 静默"成功"、随后 move 报找不到路径
+    bad = _guard_target_name(src, want_abs, "移动")
+    if bad:
+        return "", "", bad
     return cur_abs, want_abs, None
 
 

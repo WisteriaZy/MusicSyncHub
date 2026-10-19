@@ -92,12 +92,14 @@ def is_sink_name(rel_or_name: str) -> bool:
 
 
 def _safe_seg(name: str, fallback: str = "") -> str:
-    """把标签值变成安全的目录名（去掉路径分隔符与非法字符）。"""
-    s = str(name or "").strip()
-    for ch in '\\/:*?"<>|':
-        s = s.replace(ch, "_")
-    s = s.replace("\n", " ").replace("\r", " ").strip().strip(".")
-    return s or fallback
+    """把标签值变成安全的目录名（去掉路径分隔符与非法字符）。
+
+    ★ 走 `paths.safe_name`（唯一来源）。原来这里只换了非法字符，
+      专辑/艺术家标签叫 `Con` / `Nul` / `Aux`（真有这样的乐队）时，
+      整理会生成 `Con/` 目录 —— 资源管理器里打不开也删不掉；
+      `Nul/` 更糟，往里搬的每首歌都会报"找不到路径"。
+    """
+    return P.safe_name(name, fallback)
 
 
 # remix / 翻唱 / 改编的标志。这类文件的 artist 标签往往是**原作者**，

@@ -114,3 +114,47 @@ Agent 担心 `dst_dir` 未走 `in_source_rel`。
 1. 默认 `hard=False`，进回收站
 2. 永久删除必须 `confirm=true`
 3. 补"只读源拒绝"测试
+
+---
+
+## 六、系统层面：Windows 命名规则
+
+用户报告"能建出名为 `con` 的文件夹"。实测（Win11 + Python 3.13，临时目录）：
+
+| 操作 | 结果 |
+| --- | --- |
+| `mkdir CON` / `COM1` / `aux.flac` | 成功，得到资源管理器里打不开、删不掉的目录 |
+| `mkdir NUL` | 静默"成功"，但目录不存在；之后往里搬文件全部 `WinError 3` |
+| 整张专辑目录改名为 `nul` | `shutil.move` 逐个文件报错，半途而废 |
+| 写文件 `nul`（无扩展名） | 不报错，数据被设备吞掉（0 字节） |
+| `Album.` / `Album ` | 系统静默剥掉尾随点/空格，实际落成 `Album`，可能撞上已有目录 |
+| 名字含 `\x01` 等控制字符 | `WinError 123` |
+
+原来只有上传和中转站各自挡了保留名（两份清单），新建目录、目录改名、执行器的 rename/move/copy/transfer、智能整理生成的目录名都没挡。
+
+**修复**：规则收口到 `app/core/paths.py`（唯一来源，和 `AUDIO_EXTS` 同一原则）：
+
+- `name_problem(name)` / `path_problem(rel)`：用户亲手输入的名字 → **拒绝并说明原因**
+- `safe_name(name)`：标签值、上传文件名等不可信来源 → **自动修正**（`Con` → `_Con`）
+
+接入点：`folders_api` 新建/改名、执行器 `_resolve_move` / `_do_rename` / `_do_copy` / `_do_transfer` 以及预演 `_dry`、`organize._safe_seg`、上传 `_safe_name` 与入库目录、中转站 `_safe_name` 与归位目录。只检查**写入目标**，不检查源路径（库里已有的怪名字文件要能被移走/改好）。
+
+### 顺带发现：只改大小写的改名会弄丢文件
+
+`Song.mp3` → `song.mp3` 在大小写不敏感的盘上，`exists("song.mp3")` 为真，而"已存在的目标"就是源文件自己：
+
+| 策略 | 修复前 |
+| --- | --- |
+| skip | 报"目标已存在，跳过" |
+| rename | 改成 `song (2).mp3` |
+| **overwrite** | **先把"目标"移进回收站 —— 移走的正是源文件；步骤报 error，曲库里文件消失** |
+
+目录 `Album` → `album` 则报"目标目录已存在且非空"。
+
+**修复**：数据源新增 `same_entry(a, b)`（本地源用 `os.path.samefile`），执行器 rename/move 和 `rename_dir`、`folders_api.rename_folder` 在冲突处理前先判断，是同一条目就直接原子改名。
+
+守护测试：`tests/test_audit_fixes.py::WindowsNameRulesTest`、`CaseOnlyRenameTest`。
+
+### 未处理
+
+- **超长路径（>260 字符）**：本机实测 386 字符能建成（系统开了长路径支持）。没开的机器上会报错，但是是明确失败、不丢文件，暂不处理。

@@ -257,6 +257,16 @@ class LocalSource(MusicSource):
     def replace(self, src_path: str, dst_path: str) -> None:
         os.replace(self._native(src_path), self._native(dst_path))
 
+    def same_entry(self, a: str, b: str) -> bool:
+        """两条路径是不是同一个物理条目（大小写不敏感文件系统上的"只改大小写"）。"""
+        na, nb = self._native(a), self._native(b)
+        if na == nb:
+            return False                     # 完全相同不算"改名"，交给调用方的 cur==want
+        try:
+            return os.path.samefile(na, nb)
+        except OSError:
+            return False
+
     def move(self, src_path: str, dst_path: str) -> None:
         """同源内移动：优先用原子改名，跨盘（EXDEV）才退化成"复制→校验→删源"。
 
@@ -614,6 +624,11 @@ class LocalSource(MusicSource):
         src, dst = self._native(src_path), self._native(dst_path)
         if not os.path.isdir(src):
             raise SourceError(f"目录不存在: {src_path}")
+        # ★ 只改大小写（`Album` → `album`）：Windows 上 dst "已存在"的就是 src 自己，
+        #   原来会报"目标目录已存在且非空"。走 os.rename 原子改名即可。
+        if self.same_entry(src_path, dst_path):
+            os.rename(src, dst)
+            return
         if os.path.exists(dst):
             if not os.path.isdir(dst):
                 raise SourceError(f"目标已存在同名文件: {dst_path}")

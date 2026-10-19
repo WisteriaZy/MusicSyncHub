@@ -252,13 +252,9 @@ def _safe_name(d: str, name: str) -> str:
     写到这些名字上数据会被设备吞掉（得到 0 字节文件），
     而 `os.replace` 到它们会**永久挂起**。
     """
-    # 带扩展名的形态也一样是设备名（`CON.flac` 同样出问题）
-    _res = ({"CON", "PRN", "AUX", "NUL"}
-            | {f"COM{i}" for i in range(1, 10)}
-            | {f"LPT{i}" for i in range(1, 10)})
-    name = str(name or "")
-    if os.path.splitext(name)[0].rstrip(" .").upper() in _res:
-        name = "_" + name
+    # 判据统一走 `paths.safe_name`（保留名 / 非法字符 / 尾随点空格）
+    from .core import paths as P
+    name = P.safe_name(str(name or ""), "unnamed")
     base, ext = os.path.splitext(name)
     cand = name
     i = 1
@@ -503,6 +499,10 @@ def station_move_out(payload: Dict[str, Any] = Body(...), job=Depends(exclusive_
             raise HTTPException(400, "目标目录不能包含 ..")
         if not P.inside_root(root, dest_abs):
             raise HTTPException(400, "目标目录超出数据源范围")
+        _rel = dest_abs[len(root.rstrip("/")):].strip("/")
+        _bad = P.path_problem(_rel) if _rel else ""
+        if _bad:
+            raise HTTPException(400, f"目标目录不合法：{_bad}")
     try:
         os.makedirs(dest_abs, exist_ok=True)
     except OSError as exc:

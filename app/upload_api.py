@@ -253,34 +253,19 @@ def _batch_dir(bid: str, must_exist: bool = True) -> str:
     return d
 
 
-# Windows 保留设备名。写这些名字**不会报错**，但数据会被设备吞掉，
-# 更糟的是 `os.replace()` 到它们会**永久挂起**（实测 8 秒无返回）。
-# CON/NUL/COM1 这些即使带扩展名也仍然是设备（`CON.flac` 一样出问题）。
-_WIN_RESERVED = (
-    {"CON", "PRN", "AUX", "NUL"}
-    | {f"COM{i}" for i in range(1, 10)}
-    | {f"LPT{i}" for i in range(1, 10)}
-)
-
-
 def _is_win_reserved(name: str) -> bool:
-    """这个名字在 Windows 上是不是保留设备名（含带扩展名的形态）。"""
-    stem = os.path.splitext(str(name or ""))[0].rstrip(" .").upper()
-    return stem in _WIN_RESERVED
+    """这个名字在 Windows 上是不是保留设备名（判据在 `paths`，唯一来源）。"""
+    return P.is_win_reserved(name)
 
 
 def _safe_name(name: str) -> str:
-    """上传来的文件名不可信：只取最后一段，去掉路径分隔符。
+    """上传来的文件名不可信：只取最后一段，再按 Windows 命名规则修正。
 
-    还要挡掉 Windows 保留设备名 —— 否则用户上传 `CON.flac` 会得到
-    一个 0 字节的"文件"，而入库时 `os.replace` 到它会直接挂住整个请求。
+    保留设备名（`CON.flac` 写进去是 0 字节，`os.replace` 到它会挂住）、
+    非法字符、尾随点/空格都由 `paths.safe_name` 统一处理。
     """
     base = os.path.basename(str(name or "").replace("\\", "/"))
-    base = re.sub(r'[<>:"|?*\x00-\x1f]', "_", base).strip().strip(".")
-    if base and _is_win_reserved(base):
-        # 加前缀而不是替换：保留原名可读，同时不再是设备名
-        base = "_" + base
-    return base[:200] or f"unnamed-{uuid.uuid4().hex[:8]}"
+    return P.safe_name(base) or f"unnamed-{uuid.uuid4().hex[:8]}"
 
 
 def _unique_in(dirpath: str, name: str) -> str:
@@ -410,7 +395,9 @@ async def upload(files: List[UploadFile] = File(...),
     dest = base
     sub = str(subdir or "").strip().strip("/")
     if sub:
-        parts = [x for x in P.norm(sub).split("/") if x and x != ".."]
+        # 暂存区内的子目录名也按 Windows 规则修正（来自前端，不可信）
+        parts = [P.safe_name(x) for x in P.norm(sub).split("/") if x and x != ".."]
+        parts = [x for x in parts if x]
         dest = os.path.join(base, *parts) if parts else base
     os.makedirs(dest, exist_ok=True)
 
@@ -1162,6 +1149,10 @@ def upload_commit(payload: Dict[str, Any] = Body(...), exclusive: None = Depends
         #   `root/../outside` —— 字符串确实以 root 开头，但文件系统会解析 ..
         if P.has_dotdot(dst) or re.match(r"^[A-Za-z]:", dst):
             raise HTTPException(400, f"目标目录不合法: {dst}")
+        # 入库目录里有 NUL / CON 之类：makedirs 静默"成功"，随后整批 WinError 3
+        _bad = P.path_problem(dst) if dst else ""
+        if _bad:
+            raise HTTPException(400, f"目标目录不合法：{_bad}")
         tgt = os.path.join(root, dst.replace("/", os.sep)) if dst else root
         per_dir[tgt] = per_dir.get(tgt, 0) + int(f.get("size") or 0)
     for tgt, sz in per_dir.items():

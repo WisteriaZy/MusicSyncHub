@@ -419,6 +419,15 @@ class MusicSource:
         except Exception:
             return False
 
+    def same_entry(self, a: str, b: str) -> bool:
+        """`a` 和 `b` 是不是磁盘上的**同一个条目**（只差大小写的改名）。
+
+        Windows / macOS 的文件系统大小写不敏感：`Song.mp3` 改成 `song.mp3` 时
+        `exists("song.mp3")` 为真 —— 但那个"已存在的目标"就是它自己。
+        默认实现只比字符串；本地源用 `os.path.samefile` 覆盖。
+        """
+        return False
+
     def display(self, path: str) -> str:
         return P.display_path(path, "\\" if self.kind == "local" and os.name == "nt" else "/")
 

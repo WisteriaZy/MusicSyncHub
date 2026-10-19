@@ -459,6 +459,100 @@ def similarity(a: str, b: str) -> float:
     return char_ratio
 
 
+# ------------------------------------------------------------------ Windows 命名规则
+# ★ 唯一来源。以前 `upload_api` / `station_api` 各有一份保留名清单，
+#   而新建目录、目录改名、文件改名、智能整理的目录名**一份都没有**。
+#
+# 实测（Win11 + Python 3.13，见 docs/SECURITY_REVIEW_2026-10-19.md 第六节）：
+#   · `mkdir CON` 成功 —— 得到一个资源管理器里打不开、删不掉的目录
+#   · `NUL` 当目录名：makedirs 静默"成功"但目录不存在，之后往里搬文件
+#     全部 `WinError 3`；整张专辑改名成 `nul` 会**逐个文件报错、半途而废**
+#   · `nul`（不带扩展名）当文件名：写入不报错，数据被设备吞掉（0 字节）
+#   · 名字末尾的 `.` / 空格会被系统**静默剥掉**：`Album.` 实际落成 `Album`，
+#     可能撞上已有的同名目录；返回给界面的路径和磁盘上的对不上
+#   · 控制字符（\x00-\x1f）直接 `WinError 123`
+#
+# 这些规则在 Linux 上不是硬限制，但数据源可能是映射盘 / SMB 共享 / 之后拷到
+# Windows 上的 U 盘，所以**不分平台一律拒绝**：库里的名字应该在哪都能用。
+WIN_RESERVED_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+    # 上标数字形态（COM¹ 等）在新版 Windows 上同样是设备名
+    | {f"COM{c}" for c in "¹²³"}
+    | {f"LPT{c}" for c in "¹²³"}
+)
+WIN_INVALID_CHARS = '<>:"/\\|?*'
+_WIN_CTRL = re.compile(r"[\x00-\x1f]")
+
+
+def is_win_reserved(name: str) -> bool:
+    """这个名字是不是 Windows 保留设备名（含 `CON.flac`、`nul .mp3` 这类形态）。
+
+    规则：取第一个 `.` 之前的部分、去掉尾随空格后比较（不区分大小写）——
+    Windows 判设备名就是这么切的，所以 `CON.tar.gz` 也是设备名。
+    """
+    stem = str(name or "").split(".", 1)[0].rstrip(" ")
+    return stem.upper() in WIN_RESERVED_NAMES
+
+
+def name_problem(name: str) -> str:
+    """单段文件/目录名在 Windows 上的问题；没问题返回空串。
+
+    只检查**一段**名字（不含路径分隔符）。用于"用户/标签给的名字 → 落盘"
+    之前的拒绝式校验：返回的文字直接给用户看。
+    """
+    s = str(name or "")
+    if not s.strip():
+        return "名字不能为空"
+    if s in (".", ".."):
+        return "名字不能是 . 或 .."
+    bad = sorted({ch for ch in s if ch in WIN_INVALID_CHARS})
+    if bad:
+        return "名字不能包含 " + " ".join(bad)
+    if _WIN_CTRL.search(s):
+        return "名字不能包含控制字符"
+    if s[-1] in ". ":
+        return "名字不能以 . 或空格结尾（Windows 会自动去掉，实际名字会和你看到的不一样）"
+    if is_win_reserved(s):
+        return f"「{s}」是 Windows 保留的设备名（CON / NUL / COM1 等），不能用作文件或目录名"
+    if len(s) > 255:
+        return "名字太长（单段不能超过 255 个字符）"
+    return ""
+
+
+def path_problem(rel: str) -> str:
+    """相对路径里**每一段**的命名问题；没问题返回空串。"""
+    for seg in norm(rel).strip("/").split("/"):
+        if not seg:
+            continue
+        msg = name_problem(seg)
+        if msg:
+            return f"{msg}（{seg}）"
+    return ""
+
+
+def safe_name(name: str, fallback: str = "") -> str:
+    """把**不可信来源**的名字（标签值、上传文件名）改造成可落盘的名字。
+
+    与 `name_problem` 的分工：用户亲手输入的名字 → 拒绝并提示（不悄悄改）；
+    来自标签/上传的名字 → 用这里修正（用户没法逐个去改几百个标签）。
+    """
+    s = _WIN_CTRL.sub(" ", str(name or ""))
+    for ch in WIN_INVALID_CHARS:
+        s = s.replace(ch, "_")
+    s = s.strip().rstrip(". ").strip()
+    if s in ("", ".", ".."):
+        return fallback
+    if is_win_reserved(s):
+        # 加前缀而不是替换：保留原名可读，同时不再是设备名
+        s = "_" + s
+    if len(s) > 200:
+        stem, ext = os.path.splitext(s)
+        s = stem[:200 - len(ext)].rstrip(". ") + ext
+    return s or fallback
+
+
 def has_dotdot(p: str) -> bool:
     """路径里是否含 `..` 段。
 

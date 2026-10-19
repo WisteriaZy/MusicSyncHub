@@ -484,6 +484,140 @@ class WindowsReservedNameTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class WindowsNameRulesTest(unittest.TestCase):
+    """★ Windows 命名规则的唯一来源 `paths.name_problem / safe_name`。
+
+    实测（Win11）：`mkdir CON` 成功但打不开删不掉；`NUL` 当目录名时 makedirs
+    静默"成功"、之后往里搬文件全部 WinError 3；`Album.` 会被系统剥成 `Album`。
+    以前只有上传/中转站挡了保留名，新建目录、改名、整理目录名一个都没挡。
+    """
+
+    BAD = ["CON", "con", "NUL", "nul.mp3", "Aux", "PRN.flac", "COM1", "lpt9.wav",
+           "CON.tar.gz", "nul .mp3", "Album.", "Album ", "a:b", "a?b", "a|b",
+           "a\x01b", ".", "..", "", "   ", "x" * 256]
+    GOOD = ["console", "Connection", "nullable.mp3", "COM10", "LPT0",
+            "Auxiliary", ".hidden", " lead", "周杰伦", "Album (Remix)",
+            "a.b.c.flac", "x" * 255]
+
+    def test_name_problem(self):
+        from app.core import paths as P
+        for n in self.BAD:
+            self.assertTrue(P.name_problem(n), f"{n!r} 应该被拒")
+        for n in self.GOOD:
+            self.assertEqual("", P.name_problem(n), f"{n!r} 被误拒")
+
+    def test_path_problem_checks_every_segment(self):
+        from app.core import paths as P
+        self.assertTrue(P.path_problem("华语/NUL/x.mp3"))
+        self.assertTrue(P.path_problem("Artist./Album"))
+        self.assertEqual("", P.path_problem("华语/周杰伦/晴天.flac"))
+
+    def test_safe_name_fixes_untrusted(self):
+        from app.core import paths as P
+        for n in ["Con", "NUL.mp3", "Album.", "a:b?c", "AC/DC", "x\x00y"]:
+            fixed = P.safe_name(n, "fb")
+            self.assertEqual("", P.name_problem(fixed), f"{n!r} → {fixed!r} 仍不合法")
+        self.assertEqual("fb", P.safe_name("..", "fb"))
+        self.assertEqual("正常歌曲.flac", P.safe_name("正常歌曲.flac"))
+
+    def test_organize_seg_uses_rules(self):
+        from app.core.organize import _safe_seg
+        self.assertEqual("", __import__("app.core.paths", fromlist=["x"]).name_problem(_safe_seg("Nul")))
+
+    def test_folder_create_rename_reject_reserved(self):
+        """新建/改名目录的接口必须拒绝 CON / NUL / 尾随点。"""
+        import inspect
+        from app.sources import folders_api as F
+        for fn in (F.create_folder, F.rename_folder):
+            self.assertIn("name_problem", inspect.getsource(fn),
+                          f"{fn.__name__} 没接 paths.name_problem")
+
+    def test_executor_rejects_bad_target(self):
+        """执行器：rename/move/copy 到 NUL / CON 一律报错，源文件不动。"""
+        from app.core.ops import Executor
+        from app.core.config import SourceConfig
+        from app.sources.local import LocalSource
+        tmp = tempfile.mkdtemp(prefix="msh-winname-")
+        try:
+            src_file = os.path.join(tmp, "a.mp3")
+            with open(src_file, "wb") as fh:
+                fh.write(b"AUDIO")
+            s = LocalSource(SourceConfig(id="s", name="s", type="local", root=tmp))
+            ex = Executor({"s": s})
+            steps = [
+                {"id": "r", "op": "rename", "src": "s", "dst": "s",
+                 "src_path": "a.mp3", "dst_path": "NUL.mp3"},
+                {"id": "m", "op": "move", "src": "s", "dst": "s",
+                 "src_path": "a.mp3", "dst_path": "NUL/a.mp3"},
+                {"id": "c", "op": "copy", "src": "s", "dst": "s",
+                 "src_path": "a.mp3", "dst_path": "CON/a.mp3"},
+            ]
+            out = ex.run(steps, execute=True, workers=1)
+            by = {r["step"]: r for r in out["results"]}
+            for k in ("r", "m", "c"):
+                self.assertEqual("error", by[k]["state"], by[k])
+                self.assertIn("目标名不合法", by[k]["detail"])
+            self.assertTrue(os.path.exists(src_file), "源文件必须原样保留")
+            self.assertEqual(["a.mp3"], sorted(os.listdir(tmp)))
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+@unittest.skipUnless(os.name == "nt", "大小写不敏感文件系统才有这个问题")
+class CaseOnlyRenameTest(unittest.TestCase):
+    """★ 只改大小写（Song.mp3 → song.mp3）。
+
+    修复前实测：policy=overwrite 时执行器认为"目标已存在"，先把目标移进回收站
+    —— 而那个"目标"就是源文件本身。结果：曲库里文件消失，步骤报 error。
+    skip 报"已存在"、rename 改成 `song (2).mp3`，都不是用户要的。
+    """
+
+    def test_all_policies(self):
+        import shutil
+        from app.core.ops import Executor
+        from app.core.config import SourceConfig
+        from app.sources.local import LocalSource
+        for pol in ("skip", "rename", "overwrite"):
+            tmp = tempfile.mkdtemp(prefix="msh-case-")
+            try:
+                with open(os.path.join(tmp, "Song.mp3"), "wb") as fh:
+                    fh.write(b"AUDIO")
+                os.makedirs(os.path.join(tmp, "d"))
+                with open(os.path.join(tmp, "d", "Track.mp3"), "wb") as fh:
+                    fh.write(b"T")
+                s = LocalSource(SourceConfig(id="s", name="s", type="local", root=tmp))
+                out = Executor({"s": s}).run([
+                    {"id": "r", "op": "rename", "src": "s", "dst": "s",
+                     "src_path": "Song.mp3", "dst_path": "song.mp3"},
+                    {"id": "m", "op": "move", "src": "s", "dst": "s",
+                     "src_path": "d/Track.mp3", "dst_path": "d/track.mp3"},
+                ], execute=True, policy=pol, workers=1)
+                for r in out["results"]:
+                    self.assertEqual("done", r["state"], f"{pol}: {r}")
+                names = [x for x in os.listdir(tmp) if not x.startswith(".")]
+                self.assertIn("song.mp3", names, pol)
+                self.assertEqual(["track.mp3"], os.listdir(os.path.join(tmp, "d")), pol)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_rename_dir_case_only(self):
+        import shutil
+        from app.core.config import SourceConfig
+        from app.sources.local import LocalSource
+        tmp = tempfile.mkdtemp(prefix="msh-case-")
+        try:
+            os.makedirs(os.path.join(tmp, "Album"))
+            with open(os.path.join(tmp, "Album", "x.mp3"), "wb") as fh:
+                fh.write(b"X")
+            s = LocalSource(SourceConfig(id="s", name="s", type="local", root=tmp))
+            s.rename_dir(tmp + "/Album", tmp + "/album")   # 原来抛"目标目录已存在且非空"
+            self.assertIn("album", os.listdir(tmp))
+            self.assertEqual(["x.mp3"], os.listdir(os.path.join(tmp, "album")))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class StationCheckConsistencyTest(unittest.TestCase):
     """★ 预检查的结论必须和真正执行时一致。
 

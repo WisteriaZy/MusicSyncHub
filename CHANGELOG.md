@@ -4,6 +4,18 @@
 
 ## [未发布]
 
+### 修复：Windows 命名规则 + 只改大小写的改名（2026-10-19）
+
+- **保留名 / 非法名**：能新建、改名出 `CON` / `NUL` / `COM1` / `Album.` 这类目录或文件。
+  `NUL` 当目录名时之后的搬运全部失败，整张专辑改名成 `nul` 会半途而废。
+  规则收口到 `paths.name_problem / path_problem / safe_name`（唯一来源），
+  接到新建/改名目录、执行器 rename/move/copy/transfer（含预演）、智能整理目录名、
+  上传与中转站；删掉 `upload_api` / `station_api` 里各自的保留名清单。
+- **只改大小写的改名**（`Song.mp3` → `song.mp3`）：`overwrite` 策略会把源文件本身
+  移进回收站并报错（曲库里文件消失）；`skip` 报已存在、`rename` 改成 `song (2).mp3`；
+  目录 `Album` → `album` 报"已存在且非空"。新增 `MusicSource.same_entry()` 识别同一条目。
+- 测试 892 → 900。详见 `docs/SECURITY_REVIEW_2026-10-19.md` 第六节。
+
 ### 修复：安全审查 Critical/High 级问题（2026-10-19）
 
 基于安全审查报告 `docs/SECURITY_REVIEW_2026-10-19.md`，修复 3 个 Critical 和 2 个 High 级问题。
