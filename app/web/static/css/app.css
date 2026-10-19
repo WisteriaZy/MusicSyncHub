@@ -1,0 +1,1555 @@
+/* ============================================================
+   Music Sync Hub — Windows 10 1903 (Fluent Design) 风格
+   ------------------------------------------------------------
+   对照 1903 的 Fluent 规范，和早期纯平直角 Metro 的区别：
+   * 圆角：控件 / 卡片 / 磁贴 4px，弹窗 8px（不是 0，也不是 Win11 的 8px 大圆角）
+   * 亚克力（Acrylic）：弹窗、飞出层、侧栏用半透明 + backdrop-blur
+   * 深度：悬停抬升 2px + 柔和阴影，取代原来的纯平
+   * 主题色 #0078D7 保留（1903 默认强调色）
+   * 聚焦框：1903 是 2px 实线、圆角跟随控件；不用 Win11 的双色描边
+   * 图标：细线 1.5px 描边（对标 Segoe MDL2 Assets 的线条感）
+   注意：这里是 1903，不是后来的 Sun Valley —— 所以圆角克制、无 Mica、
+   无浮动圆角菜单、阴影也更收敛。
+   ============================================================ */
+:root{
+  /* 1903 深色主题的标准层级（Alt High → Base → Alt Low → Chrome） */
+  --bg:#000000;              /* Alt High：窗口最底层 */
+  --bg-nav:#1F1F1F;          /* Chrome：导航窗格 / 顶栏 */
+  --surface:#1C1C1C;         /* Base：内容区卡片 */
+  --surface-2:#2B2B2B;       /* Alt Low：次级控件 */
+  --surface-3:#333333;       /* 选中态 */
+  --line:#383838;
+  --line-2:#4A4A4A;
+
+  /* 亚克力：1903 深色亚克力的标准配方 */
+  --acrylic:#202020;
+  --acrylic-blur:30px;
+  --acrylic-alpha:.86;
+  --smoke:rgba(0,0,0,.55);   /* 1903 用 Smoke 而不是纯黑遮罩 */
+
+  /* 文字 */
+  --fg:#FFFFFF;
+  --fg2:#C5C5C5;
+  --fg3:#8A8A8A;
+
+  /* 主题色（1903 默认强调色） */
+  --accent:#0078D7;
+  --accent-hover:#1A86E0;
+  --accent-press:#005A9E;
+  --accent-link:#4CC2FF;
+  --accent-soft:rgba(0,120,215,.18);
+
+  /* 语义色 */
+  --ok:#6CCB5F;
+  --ok-bg:rgba(108,203,95,.16);
+  --warn:#FFD24C;
+  --warn-bg:rgba(255,210,76,.16);
+  --danger:#FF6B6B;
+  --danger-bg:rgba(255,107,107,.16);
+  --info:#4CC2FF;
+
+  /* 左右两侧标识色 */
+  --left:#4CC2FF;
+  --right:#5FD3A0;
+
+  /* Win10 磁贴标准色板 */
+  --tile-blue:#0078D7;
+  --tile-teal:#00B7C3;
+  --tile-purple:#8764B8;
+  --tile-magenta:#E3008C;
+  --tile-orange:#CA5010;
+  --tile-green:#107C10;
+  --tile-olive:#498205;
+  --tile-steel:#005A9E;
+  --tile-plum:#B4009E;
+  --tile-gray:#6B6B6B;
+
+  /* Fluent 圆角与阴影 */
+  --r-sm:3px;                /* 小徽标 / 标签 */
+  --r:4px;                   /* 控件标准圆角 */
+  --r-lg:8px;                /* 弹窗 / 大面板 */
+  --shadow-2:0 2px 4px rgba(0,0,0,.26);
+  --shadow-8:0 4px 8px rgba(0,0,0,.26);
+  --shadow-16:0 8px 16px rgba(0,0,0,.26);
+  --shadow-64:0 32px 64px rgba(0,0,0,.54);
+  --ring:0 0 0 2px var(--accent);   /* 1903 的强调色聚焦环 */
+
+  --nav-w:248px;
+
+  /* ---------------------------------------------------------------- 字号阶梯
+     之前全文件用了近 20 种字号（9.5 / 10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 …），
+     相邻两档差 0.5px，肉眼分不出来，只会让界面显得"没对齐"。
+     收敛成 6 档：说明文字 / 正文小 / 正文 / 强调 / 小标题 / 标题。
+     `--fs-cap` 是"辅助文字下限" —— 中文在 11px 以下笔画会糊。 */
+  --fs-cap:11px;        /* 辅助文字（时间、路径、计数） */
+  --fs-sm:12px;         /* 次级正文 */
+  --fs:12.5px;          /* 正文（表格、表单） */
+  --fs-md:13.5px;       /* 强调正文 */
+  --fs-lg:15px;         /* 小标题 */
+  --fs-xl:24px;         /* 页面标题 */
+
+  /* 行高：中文需要比英文松一点才好读 */
+  --lh-tight:1.35;
+  --lh:1.6;
+
+  /* 控件统一高度（1903 的按钮/输入框都是 32px） */
+  --ctl-h:32px;
+  --ctl-h-sm:28px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:14px/1.5 "Segoe UI","Segoe UI Web (West European)","Microsoft YaHei UI",
+       "PingFang SC","Hiragino Sans GB",system-ui,-apple-system,sans-serif;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  /* 中英混排时数字/字母抖动会让表格看着"脏"，用等宽数字压住 */
+  font-variant-numeric:tabular-nums;
+}
+button,input,select,textarea{font:inherit;color:inherit;border-radius:var(--r)}
+::-webkit-scrollbar{width:12px;height:12px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#4A4A4A;border:3px solid transparent;background-clip:content-box;border-radius:6px}
+::-webkit-scrollbar-thumb:hover{background:#6B6B6B;background-clip:content-box}
+
+/* 1903 聚焦框：2px 强调色实线，圆角跟随控件 */
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent-link);outline-offset:-1px}
+
+/* 亚克力：不支持 backdrop-filter 时自动退化成不透明底色，不影响可读性 */
+@supports (backdrop-filter:blur(2px)) or (-webkit-backdrop-filter:blur(2px)){
+  .acrylic{
+    background:rgba(32,32,32,var(--acrylic-alpha)) !important;
+    -webkit-backdrop-filter:blur(var(--acrylic-blur)) saturate(120%);
+    backdrop-filter:blur(var(--acrylic-blur)) saturate(120%);
+  }
+}
+
+.hidden{display:none !important}
+.muted{color:var(--fg3)}
+.pad{padding:12px}
+.mono{font-family:"Cascadia Mono",Consolas,"SF Mono",Menlo,monospace;font-size:12.5px}
+.right{text-align:right}
+.nowrap{white-space:nowrap}
+.grow{flex:1}
+hr.sep{border:0;border-top:1px solid var(--line);margin:16px 0}
+
+/* ------------------------------------------------------------ 图标
+   1903 图标是细线描边（Segoe MDL2 Assets 的线条感），
+   这里统一用 1.5px 描边 + 圆头圆角，替代早期的实心块。 */
+.ico{
+  width:16px;height:16px;flex:0 0 auto;fill:none;
+  stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;
+  vertical-align:-3px;
+}
+.ico *{vector-effect:non-scaling-stroke}
+/* 明确需要实心的图标（播放三角等）继续用填充 */
+.ico.fill,.ico.fill *{fill:currentColor;stroke:none}
+.ico.lg{width:20px;height:20px}
+.ico.xl{width:28px;height:28px}
+.ico.huge{width:64px;height:64px}
+
+/* ------------------------------------------------------------ 布局 */
+#app{display:flex;flex-direction:column;height:100vh}
+.topbar{
+  display:flex;align-items:center;gap:10px;padding:0 12px;height:48px;
+  background:var(--bg-nav);border-bottom:1px solid var(--line);flex:0 0 auto;z-index:20;
+  box-shadow:var(--shadow-2);
+}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:14px;letter-spacing:.2px;padding-right:8px}
+.brand .ico{color:var(--accent-link)}
+.tabs{display:flex;gap:2px;margin-left:6px;flex:1;min-width:0;overflow:hidden}
+.tab{
+  position:relative;display:flex;align-items:center;gap:7px;
+  background:transparent;border:0;color:var(--fg2);padding:0 14px;height:48px;
+  cursor:pointer;font-size:13.5px;white-space:nowrap;border-radius:0;
+  transition:background .12s,color .12s;
+}
+.tab:hover{background:rgba(255,255,255,.06);color:var(--fg)}
+.tab.active{color:var(--fg);font-weight:600}
+/* 1903 用底部 2px 强调色指示条（不再是早期的 3px 粗条） */
+.tab.active::after{content:"";position:absolute;left:12px;right:12px;bottom:0;height:2px;background:var(--accent)}
+.tab.active .ico{color:var(--accent-link)}
+.top-right{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.body{display:flex;flex:1;min-height:0}
+
+/* ------------------------------------------------------------ 左侧导航窗格 */
+.sidebar{
+  width:var(--nav-w);flex:0 0 var(--nav-w);background:var(--bg-nav);
+  border-right:1px solid var(--line);display:flex;flex-direction:column;
+  overflow-y:auto;padding:10px 0;gap:14px;
+}
+.side-block{display:flex;flex-direction:column}
+.side-title{
+  font-size:12px;font-weight:600;color:var(--fg3);letter-spacing:.04em;
+  padding:6px 16px;display:flex;align-items:center;gap:6px;text-transform:none;
+}
+.side-title .count{
+  background:var(--surface-2);color:var(--fg2);padding:0 6px;font-size:11px;font-weight:600;min-width:20px;
+  text-align:center;line-height:16px;border-radius:var(--r-sm);
+}
+.side-sources{display:flex;flex-direction:column}
+
+/* 1903 导航项：选中是左侧 3px 强调条 + 轻微底色，悬停有柔和反馈。
+   触摸/鼠标都要好点：整行 48px 高，右侧状态点 10px，另配一个重测按钮。 */
+.src-item{
+  position:relative;display:flex;align-items:center;gap:10px;padding:9px 12px 9px 16px;cursor:pointer;
+  border-left:3px solid transparent;min-height:48px;
+  transition:background .12s;border-radius:0 var(--r) var(--r) 0;
+}
+.src-item:hover{background:rgba(255,255,255,.06)}
+.src-item.active{background:rgba(255,255,255,.09);border-left-color:var(--accent)}
+.src-item .nm-wrap{min-width:0;flex:1}
+.src-item .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;line-height:1.35}
+.src-item .sub{
+  font-size:11.5px;color:var(--fg3);display:flex;align-items:center;gap:6px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4;
+}
+/* 状态点：有颜色 + 有文字，不只是个看不出含义的小圆 */
+.src-item .dot{width:10px;height:10px;background:var(--fg3);flex:0 0 auto;border-radius:50%;transition:background .15s}
+.src-item .dot.big{width:11px;height:11px}
+.src-item .dot.ok{background:var(--ok);box-shadow:0 0 0 2px rgba(108,203,95,.18)}
+.src-item .dot.err{background:var(--danger);box-shadow:0 0 0 2px rgba(255,107,107,.18)}
+.src-item .dot.unknown{background:transparent;border:2px solid var(--fg3);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.9}}
+/* 状态文字：在线 / 离线 / 检测中 */
+.st{font-weight:600}
+.st-ok{color:var(--ok)}
+.st-err{color:var(--danger)}
+.st-unknown{color:var(--fg3)}
+.src-item .src-retry{
+  flex:0 0 auto;width:26px;height:26px;display:none;align-items:center;justify-content:center;
+  background:transparent;border:0;color:var(--fg3);cursor:pointer;border-radius:var(--r-sm);
+}
+.src-item .src-retry:hover{background:rgba(255,255,255,.12);color:var(--fg)}
+.src-item:hover .src-retry,.src-item:focus-within .src-retry{display:flex}
+.src-item .src-retry .ico{width:13px;height:13px}
+/* 触摸设备没有 hover：重测按钮常驻 */
+@media (hover:none){
+  .src-item .src-retry{display:flex}
+}
+
+.tree{display:flex;flex-direction:column;overflow:auto;max-height:42vh}
+.tree .node{
+  display:flex;align-items:center;gap:6px;padding:8px 16px;cursor:pointer;font-size:13px;
+  white-space:nowrap;border-left:3px solid transparent;min-height:36px;transition:background .12s;
+}
+.tree .node:hover{background:rgba(255,255,255,.06)}
+.tree .node.active{background:rgba(255,255,255,.09);border-left-color:var(--accent)}
+.tree .node .n{overflow:hidden;text-overflow:ellipsis}
+.tree .node .c{margin-left:auto;color:var(--fg3);font-size:11.5px;font-variant-numeric:tabular-nums}
+
+.main{flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+/* 注意：**不要**给 .view 加 overflow:auto。
+   它自己会滚动的话，高度就变成"由内容决定"而不是撑满，
+   于是里面的 `flex:1` 子项（.fb-split → 目录树 / 文件列表）会塌成 0，
+   整块内容被裁掉。各个视图内部本来就有自己的滚动容器
+   （.fb-list / .tbl-wrap / .fb-tree），让它们各自滚就好。 */
+.view{flex:1;min-height:0;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.view.no-pad{padding:0}
+
+/* ★ 但"内容竖着堆"的视图**必须**能自己滚，否则窗口矮的时候
+   下面的内容永远看不到也点不到（用户实测：设置页；实测发现中转站也是）。
+
+   为什么不能像上面那条注释说的那样"每个视图内部各管各的滚"：
+   设置页就是一堆 `.card` 竖着排，**压根没有内部滚动容器** ——
+   内容比视口高就直接被 `.main{overflow:hidden}` 裁掉，而且没有任何滚动条。
+   而 `body{overflow:hidden}`，整个页面连全局滚动都没有。
+
+   实测（视口高 900）：`#view-station` 里第二张卡片底部在 y=1064，
+   而视图只有 788 高 —— 底下 164px 摸不到。设置页更高，超出更多。
+
+   给 `.view` 加 `overflow-y:auto` 是**安全的**：
+   它本身是 `.main` 里的 `flex:1; min-height:0` 子项，高度由 flex 决定、
+   与内容无关，所以不会出现注释里担心的"高度由内容决定 → 内部
+   `flex:1` 子项塌成 0"。真有内部滚动容器的视图
+   （files / compare / duplicates）内容刚好铺满，不会产生双滚动条。
+
+   下面还给了 `.tbl-wrap` / `.fb-list` 一个兜底 `min-height`，
+   万一将来哪个视图的容器高度算出 0，也不会整块消失。 */
+.view{overflow-y:auto;overscroll-behavior:contain}
+.tbl-wrap,.fb-list{min-height:120px}
+
+/* Win10 页面标题 */
+.page-title{font-size:24px;font-weight:300;margin:0 0 2px;letter-spacing:.2px}
+.page-sub{color:var(--fg3);font-size:12.5px;margin-bottom:4px}
+
+/* ------------------------------------------------------------ 控件
+   1903 按钮：4px 圆角、1px 边框、悬停变亮并微抬；聚焦用强调色环。 */
+.btn{
+  display:inline-flex;align-items:center;gap:7px;justify-content:center;
+  background:var(--surface-2);border:1px solid var(--line-2);color:var(--fg);
+  padding:6px 14px;min-height:32px;cursor:pointer;font-size:13.5px;white-space:nowrap;
+  border-radius:var(--r);
+  /* ★ 这里**不要**无条件写 `transform .06s`。
+     它唯一的作用是下面 `.btn:active` 那个 `translateY(1px)` 的按下位移，
+     但无条件写上之后，浏览器会对**这个按钮上任何** transform 变化做过渡 ——
+     包括**由父级布局变化引起的移动**，不只是按下。
+     实测症状：展开/折叠分组让周边重排时，带箭头的图标按钮会"从左往右滑过去"，
+     看起来像个莫名其妙的动画。同类规则（.fb-node 等）也粘过这个坑。
+
+     去掉是安全的：`transition` 作用于**计算值变化**，按下时
+     `:active` 规则命中，起点仍是旧值、终点是新值，所以按下位移照样有过渡；
+     而被动移动不再被动画。 */
+  transition:background .12s,border-color .12s,box-shadow .12s;
+}
+.btn:hover{background:var(--surface-3);border-color:#6B6B6B}
+.btn:active{background:#232323;transform:translateY(1px)}
+.btn:focus-visible{outline:none;box-shadow:var(--ring)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn.primary:active{background:var(--accent-press)}
+.btn.danger{background:transparent;border-color:var(--danger);color:#FFB3B3}
+.btn.danger:hover{background:var(--danger-bg)}
+.btn.ok{border-color:var(--ok);color:#B6F0AB;background:transparent}
+.btn.ok:hover{background:var(--ok-bg)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--fg2)}
+.btn.ghost:hover{background:rgba(255,255,255,.07);color:var(--fg);border-color:transparent}
+.btn.sm{min-height:28px;padding:3px 10px;font-size:12.5px}
+.btn.block{width:100%}
+.btn.icon{padding:0;width:30px;min-height:28px}
+.btn.icon.sm{width:28px}
+.btn.accent-flat{background:transparent;border-color:transparent;color:var(--accent-link);font-weight:600}
+.btn.accent-flat:hover{background:var(--accent-soft);color:#8FD8FF}
+
+.badge{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--surface-2);border:1px solid var(--line);padding:2px 8px;
+  font-size:11.5px;color:var(--fg2);white-space:nowrap;border-radius:var(--r-sm);
+}
+.badge.ok{background:var(--ok-bg);border-color:rgba(108,203,95,.5);color:#A8E89E}
+.badge.warn{background:var(--warn-bg);border-color:rgba(255,210,76,.5);color:#FFE28A}
+.badge.err{background:var(--danger-bg);border-color:rgba(255,107,107,.5);color:#FFB3B3}
+.badge.stream{max-width:300px;overflow:hidden;text-overflow:ellipsis}
+.chip{
+  display:inline-flex;align-items:center;gap:5px;background:transparent;
+  border:1px solid var(--line-2);padding:3px 11px;font-size:12.5px;color:var(--fg2);cursor:pointer;
+  border-radius:var(--r);transition:background .12s,border-color .12s,color .12s;
+}
+.chip:hover{background:rgba(255,255,255,.07);color:var(--fg)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.chip.lossless{background:var(--accent-soft);border-color:rgba(76,194,255,.5);color:#9BDDFF}
+/* 分段控件（1903 的 SegmentedControl / 单选组） */
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:var(--r);overflow:hidden;background:var(--surface-2)}
+.seg .chip{border:0;border-radius:0;padding:5px 12px;background:transparent}
+.seg .chip + .chip{border-left:1px solid var(--line-2)}
+.seg .chip.on{border-radius:0;background:var(--accent)}
+
+.job-pill{
+  display:flex;align-items:center;gap:7px;background:var(--surface-2);
+  border:1px solid var(--line-2);padding:4px 12px;font-size:12.5px;cursor:pointer;color:var(--fg2);
+  border-radius:var(--r);transition:background .12s,color .12s;
+}
+.job-pill:hover{background:var(--surface-3);color:var(--fg)}
+.spinner{
+  width:12px;height:12px;border:2px solid #4A4A4A;border-top-color:var(--accent-link);
+  border-radius:50%;animation:spin .7s linear infinite;display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ------------------------------------------------------------ 卡片 / 统计 */
+.card{background:var(--surface);border:1px solid var(--line);padding:16px;border-radius:var(--r-lg);box-shadow:var(--shadow-2)}
+.card h3{margin:0 0 12px;font-size:15px;font-weight:600}
+.grid{display:grid;gap:12px}
+.grid.c2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.grid.c3{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.stat{
+  background:var(--surface);border:1px solid var(--line);padding:12px 14px;
+  border-radius:var(--r);box-shadow:var(--shadow-2);
+  /* ★ 基础规则里**不要**放 transform 过渡。它只为 `:hover` 的浮起服务，
+     但无条件写上之后，浏览器会对该元素**任何** transform 变化做动画 ——
+     包括"被父级布局带着走"。这个坑已经踩过好几次（`.btn`、`.tile`），
+     用户反馈的箭头滑动就是这么来的。去掉后悬停浮起**照样有过渡**
+     （transition 作用于计算值变化，:hover 命中时起点仍是旧值）。 */
+  transition:box-shadow .12s,border-color .12s;
+}
+.stat:hover{transform:translateY(-1px);box-shadow:var(--shadow-8);border-color:var(--line-2)}
+.stat .k{font-size:11.5px;color:var(--fg3);letter-spacing:.02em}
+.stat .v{font-size:22px;font-weight:300;margin-top:4px;font-variant-numeric:tabular-nums}
+.stat .v small{font-size:12px;color:var(--fg3);font-weight:400}
+/* 统计卡下面的说明行：写清这个数字统计的是什么范围 */
+.stat .sub{font-size:11px;color:var(--fg3);margin-top:3px;line-height:1.45;word-break:break-word}
+
+/* ------------------------------------------------------------ Win10 磁贴（1903 打磨版）
+   保留磁贴色块本身（这是 Win10 的标志），但加上 1903 的圆角、
+   悬停抬升与柔和阴影，内层用一层薄薄的亚克力高光替代原来的纯平。 */
+.tiles{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(252px,1fr));
+  gap:8px;align-content:start;
+}
+.tile{
+  position:relative;display:flex;flex-direction:column;justify-content:space-between;
+  min-height:150px;padding:14px;cursor:pointer;overflow:hidden;
+  border-radius:var(--r);box-shadow:var(--shadow-2);
+  /* 同 `.stat`：基础规则里不放 transform 过渡（只为 :hover 浮起服务，
+     但会把"被动移动"也变成动画）。去掉后悬停浮起照样有过渡。 */
+  transition:box-shadow .12s ease-out,filter .12s;
+}
+/* 顶部高光：1903 磁贴的质感来源 */
+.tile::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,0) 58%);
+  opacity:.9;transition:opacity .12s;
+}
+.tile:hover{transform:translateY(-2px);box-shadow:var(--shadow-16);filter:saturate(108%)}
+.tile:hover::before{opacity:1}
+.tile:active{transform:translateY(0);box-shadow:var(--shadow-8)}
+.tile.selected{box-shadow:var(--shadow-8),0 0 0 2px var(--accent-link)}
+/* 右下角半透明大字形（Live Tile 的味道） */
+.tile .glyph{
+  position:absolute;right:-6px;bottom:-10px;opacity:.2;pointer-events:none;
+  width:96px;height:96px;fill:none;stroke:#fff;stroke-width:1.2;
+  stroke-linecap:round;stroke-linejoin:round;
+}
+.tile .t-head{position:relative;display:flex;align-items:flex-start;gap:8px}
+.tile .t-name{font-size:15.5px;font-weight:600;line-height:1.3;word-break:break-word;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+.tile .t-target{
+  position:relative;margin-top:6px;font-size:11.5px;opacity:.85;word-break:break-all;
+  font-family:"Cascadia Mono",Consolas,monospace;max-height:32px;overflow:hidden;
+}
+.tile .t-foot{position:relative;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tile .t-count{font-size:30px;font-weight:200;line-height:1;font-variant-numeric:tabular-nums}
+.tile .t-count small{font-size:13px;font-weight:400;opacity:.85;margin-left:2px}
+.tile .t-meta{font-size:11.5px;opacity:.85}
+/* 磁贴上的操作条：鼠标悬停浮现；触摸设备常驻。
+   按钮做到 36×36（比原来的 30×28 好点得多），并在上面留出整条区域。 */
+.tile .t-actions{
+  position:absolute;right:6px;top:6px;display:flex;gap:4px;opacity:0;
+  transition:opacity .14s;z-index:3;
+  background:linear-gradient(180deg,rgba(0,0,0,.34),rgba(0,0,0,.12));
+  padding:4px;border-radius:var(--r);
+}
+.tile:hover .t-actions,.tile:focus-within .t-actions,.tile.t-actions-always .t-actions{opacity:1}
+.tile .t-actions .btn{
+  background:rgba(0,0,0,.34);border-color:transparent;color:#fff;
+  width:36px;height:36px;min-height:36px;padding:0;border-radius:var(--r-sm);
+  /* 同 `.btn`：不要无条件写 `transform .06s`。
+     它只为下面 `:active` 的按下位移服务，无条件写会让
+     "被父级布局带着走"也变成动画 —— 实测会导致按钮里的箭头滑动。 */
+  transition:background .12s;
+}
+.tile .t-actions .btn .ico{width:17px;height:17px}
+.tile .t-actions .btn:hover{background:rgba(0,0,0,.6)}
+.tile .t-actions .btn:active{transform:translateY(1px)}
+.tile .t-actions .btn:focus-visible{outline:2px solid #fff;outline-offset:-2px}
+/* 触摸屏：常驻显示，且再放大一点，手指按得准 */
+@media (hover:none){
+  .tile .t-actions{
+    opacity:1;gap:6px;padding:5px;
+    background:linear-gradient(180deg,rgba(0,0,0,.42),rgba(0,0,0,.18));
+  }
+  .tile .t-actions .btn{width:42px;height:42px;min-height:42px}
+  .tile .t-actions .btn .ico{width:19px;height:19px}
+}
+/* 磁贴标题行：状态点与标题同行，右侧对齐 */
+.tile .t-head .t-title{min-width:0;flex:1}
+.tile .t-head > .dot{margin-top:6px}
+/* 磁贴里的在线状态一行 */
+.tile .t-status{position:relative;margin-top:8px;display:flex;align-items:center;gap:6px}
+.tile .t-status .badge{background:rgba(0,0,0,.3);border-color:rgba(255,255,255,.16);color:#fff}
+.tile .t-status .badge .ico{width:13px;height:13px}
+.tile .t-status .badge.ok{background:rgba(16,60,20,.5);border-color:rgba(140,230,174,.5)}
+.tile .t-status .badge.err{background:rgba(70,16,16,.5);border-color:rgba(255,157,170,.5)}
+.tile .t-out{
+  position:relative;margin-top:8px;font-size:11.5px;line-height:1.5;
+  background:rgba(0,0,0,.26);padding:6px 8px;word-break:break-word;border-radius:var(--r-sm);
+}
+.tile .t-flag{
+  position:absolute;left:0;top:0;bottom:0;width:4px;background:rgba(255,255,255,.5);
+  border-radius:var(--r) 0 0 var(--r);
+}
+/* 磁贴色板 */
+.tile.c-blue{background:var(--tile-blue)}
+.tile.c-teal{background:var(--tile-teal)}
+.tile.c-purple{background:var(--tile-purple)}
+.tile.c-magenta{background:var(--tile-magenta)}
+.tile.c-orange{background:var(--tile-orange)}
+.tile.c-green{background:var(--tile-green)}
+.tile.c-olive{background:var(--tile-olive)}
+.tile.c-steel{background:var(--tile-steel)}
+.tile.c-plum{background:var(--tile-plum)}
+.tile.c-gray{background:var(--tile-gray)}
+/* 新建磁贴：Win10 里的虚线空磁贴 */
+.tile.add{
+  background:transparent;border:2px dashed var(--line-2);align-items:center;justify-content:center;
+  color:var(--fg2);gap:8px;text-align:center;
+}
+.tile.add:hover{background:var(--surface);border-color:var(--accent);color:var(--fg);transform:none;box-shadow:none}
+
+/* ------------------------------------------------------------ 表单
+   1903 输入框：4px 圆角、1px 边框、聚焦时下沿出现 2px 强调色（FocusUnderline）。 */
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:12.5px;color:var(--fg2)}
+.field .hint{font-size:11.5px;color:var(--fg3)}
+input[type=text],input[type=password],input[type=number],select,textarea{
+  background:#252525;border:1px solid var(--line-2);padding:6px 10px;width:100%;
+  min-height:32px;outline:none;border-radius:var(--r);
+  transition:border-color .12s,background .12s,box-shadow .12s;
+}
+input[type=text]:hover,input[type=password]:hover,input[type=number]:hover,select:hover,textarea:hover{border-color:#6B6B6B}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);background:#1E1E1E}
+
+/* 聚焦/失焦**都不动箭头**。原来这里在聚焦时换了一版强调色箭头 ——
+   虽然只是静态图替换、没有动画，但它确实是"一个随状态变化的东西"，
+   用户看到的"失焦时箭头变了"很可能是这一下。既然诉求是箭头别动，
+   就连颜色也不换：状态只体现在边框和背景上。 */
+
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none;box-shadow:var(--ring)}
+input[type=range]{-webkit-appearance:none;appearance:none;height:4px;background:#5A5A5A;accent-color:var(--accent);width:100%;min-height:4px;padding:0;border:0;border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:var(--shadow-2)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:0;cursor:pointer}
+/* 下拉框箭头：**不用原生箭头**，用两条渐变画一个静态小三角。
+   （原生 `<select>` 的箭头是浏览器绘制的控件，它的状态变化由系统绘制，
+   页面 CSS 的 transition 管不到 —— 换成自己画的一张静态背景图才彻底可控。）
+   ★ 这里只定义**一次**。之前我在上面又加了一条 `select{...}`，
+   结果被这一条（在后面）整体覆盖，成了死规则 —— 已删掉，避免以后改错地方。
+   ★ 箭头**不随聚焦/失焦变色**：状态只体现在边框和背景上。 */
+select{appearance:none;-webkit-appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,#C8C8C8 50%),linear-gradient(135deg,#C8C8C8 50%,transparent 50%);
+  background-position:calc(100% - 14px) 14px,calc(100% - 9px) 14px;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:28px;
+  transition:border-color .12s,background-color .12s,box-shadow .12s}
+select::-ms-expand{display:none}
+.row{display:flex;gap:10px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg2);cursor:pointer;min-height:24px}
+.check input[type=checkbox],input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;min-height:0}
+label.inline{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--fg2)}
+input[type=radio]{accent-color:var(--accent);width:16px;height:16px}
+
+/* ------------------------------------------------------------ 表格（1903 ListView） */
+table.data{width:100%;border-collapse:collapse;font-size:13px}
+table.data th{
+  position:sticky;top:0;background:var(--surface);z-index:2;text-align:left;font-weight:600;
+  color:var(--fg2);padding:9px 10px;border-bottom:1px solid var(--line-2);white-space:nowrap;font-size:12px;
+}
+table.data th.sortable{cursor:pointer}
+table.data th.sortable:hover{color:var(--fg);background:var(--surface-2)}
+table.data td{padding:6px 10px;border-bottom:1px solid #2A2A2A;vertical-align:middle}
+table.data tbody tr:hover td{background:rgba(255,255,255,.055)}
+table.data tbody tr.sel td{background:rgba(255,255,255,.09);box-shadow:inset 3px 0 0 var(--accent)}
+table.data .num{text-align:right;font-variant-numeric:tabular-nums;font-family:"Cascadia Mono",Consolas,monospace;font-size:12.5px}
+table.data .ell{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl-wrap{overflow:auto;flex:1;min-height:0;border:1px solid var(--line);background:var(--surface);border-radius:var(--r)}
+
+.cover{width:36px;height:36px;object-fit:cover;background:#1A1A1A;display:block;border-radius:var(--r-sm)}
+.cover.lg{width:168px;height:168px;border-radius:var(--r)}
+.cover.sm{width:26px;height:26px}
+.cover.ph{display:flex;align-items:center;justify-content:center;color:#5A5A5A;font-size:16px}
+
+.quality{display:inline-flex;gap:4px;align-items:center}
+.tag{background:var(--surface-2);border:1px solid var(--line);padding:1px 6px;font-size:11px;color:var(--fg2);white-space:nowrap;border-radius:var(--r-sm)}
+.tag.ll{background:var(--accent-soft);border-color:rgba(76,194,255,.45);color:#9BDDFF}
+.tag.hi{background:var(--warn-bg);border-color:rgba(255,210,76,.45);color:#FFE28A}
+
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  color:var(--fg3);padding:64px 20px;text-align:center;flex:1}
+.empty .big{font-size:44px;opacity:.3;line-height:1}
+.empty .big .ico{width:56px;height:56px;stroke-width:1}
+
+.toolbar{
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:0 0 auto;
+  background:var(--surface);border:1px solid var(--line);padding:10px 12px;
+  border-radius:var(--r);box-shadow:var(--shadow-2);
+}
+.toolbar .sep-v{width:1px;height:22px;background:var(--line-2)}
+
+/* 筛选提示条：把"被筛掉了多少组"讲清楚 */
+.filtnote{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:var(--accent-soft);border:1px solid rgba(76,194,255,.32);
+  color:var(--fg2);font-size:12.5px;padding:8px 12px;border-radius:var(--r);
+}
+.filtnote b{color:var(--fg)}
+
+/* ------------------------------------------------------------ 对比视图 */
+.cmp-head{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cmp-col{border:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column;min-width:0;background:var(--surface)}
+.cmp-col.left{border-top:3px solid var(--left)}
+.cmp-col.right{border-top:3px solid var(--right)}
+.cmp-col .hd{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.cmp-col .hd .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-body{display:grid;grid-template-columns:1fr 1fr;gap:0;flex:1;min-height:0}
+.cmp-body .pane{overflow:auto;min-height:0}
+.cmp-row{
+  display:flex;gap:9px;align-items:center;padding:5px 10px;border-bottom:1px solid #2A2A2A;cursor:pointer;
+  border-left:3px solid transparent;min-height:40px;transition:background .12s;
+}
+.cmp-row:hover{background:rgba(255,255,255,.055)}
+.cmp-row.sel{background:rgba(255,255,255,.09)}
+.cmp-row.matched{border-left-color:var(--ok)}
+.cmp-row.only{border-left-color:var(--warn);background:rgba(255,210,76,.07)}
+.cmp-row.conflict{border-left-color:var(--tile-purple)}
+.cmp-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-row .sz{color:var(--fg3);font-size:11.5px;font-family:"Cascadia Mono",Consolas,monospace}
+.cmp-pair{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #2A2A2A;cursor:pointer;transition:background .12s}
+.cmp-pair:hover{background:rgba(255,255,255,.055)}
+
+/* ------------------------------------------------------------ 播放条 */
+.player{
+  flex:0 0 auto;height:64px;display:flex;align-items:center;gap:18px;padding:0 14px;
+  background:var(--bg-nav);border-top:1px solid var(--line);z-index:20;
+}
+.now{display:flex;align-items:center;gap:11px;width:300px;min-width:0}
+.np-cover{
+  width:44px;height:44px;background:var(--surface-2);display:flex;align-items:center;
+  justify-content:center;color:#5A5A5A;font-size:18px;overflow:hidden;flex:0 0 auto;
+  border-radius:var(--r-sm);box-shadow:var(--shadow-2);
+}
+.np-cover img{width:100%;height:100%;object-fit:cover}
+.np-meta{min-width:0}
+.np-title{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.np-sub{font-size:11.5px;color:var(--fg3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-ctl{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.player-ctl input[type=range]{flex:1;min-width:120px}
+.time{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--fg3);min-width:100px;text-align:center}
+.vol{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--fg3)}
+.vol input{width:84px}
+
+/* ------------------------------------------------------------ 弹窗（1903 ContentDialog + Acrylic） */
+.modal-mask{
+  position:fixed;inset:0;background:var(--smoke);display:flex;align-items:center;
+  justify-content:center;z-index:100;padding:24px;
+}
+.modal{
+  background:var(--acrylic);border:1px solid rgba(255,255,255,.09);
+  box-shadow:var(--shadow-64);
+  max-width:min(96vw,1180px);max-height:92vh;display:flex;flex-direction:column;overflow:hidden;
+  border-radius:var(--r-lg);
+  animation:modal-in .14s ease-out;
+}
+@keyframes modal-in{from{opacity:0;transform:translateY(8px) scale(.995)}to{opacity:1;transform:none}}
+.modal.sm{width:460px}
+.modal.md{width:700px}
+.modal.lg{width:1080px}
+.modal-hd{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.modal-hd h2{margin:0;font-size:20px;font-weight:300;flex:1}
+.modal-bd{padding:18px 20px;overflow:auto;flex:1;min-height:0}
+.modal-ft{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--line);background:rgba(255,255,255,.03)}
+.modal .x{background:transparent;border:0;color:var(--fg2);cursor:pointer;padding:4px;display:flex;align-items:center;border-radius:var(--r-sm)}
+.modal .x:hover{background:rgba(255,255,255,.08);color:var(--fg)}
+
+/* ---------------------------------------------------------------- 实验性功能警告
+   网络数据源（SFTP / WebDAV / HTTP 目录 / SMB / FTP）都**没有对着真实服务器
+   完整测过**，界面上必须说清楚 —— 只是"实验性"三个字太含糊，
+   用户不知道到底哪一步没底。用警示黄，和普通灰色 hint 明显区分开。 */
+.exp-warn{
+  margin-top:6px;padding:9px 11px;border-radius:var(--r-sm);
+  background:color-mix(in srgb,var(--warn) 13%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 42%,transparent);
+  border-left:3px solid var(--warn);
+  font-size:12px;line-height:1.6;color:var(--fg);
+}
+.exp-warn > b{display:block;margin-bottom:3px;color:var(--warn);
+  font-size:12.5px}
+.exp-warn .exp-what{margin-top:5px;color:var(--fg2);font-size:11.5px}
+.exp-warn .exp-tip{margin-top:6px;padding-top:6px;font-size:11.5px;color:var(--fg2);
+  border-top:1px dashed color-mix(in srgb,var(--warn) 32%,transparent)}
+/* 数据源列表里的"实验性"角标 */
+.badge.exp{background:color-mix(in srgb,var(--warn) 20%,transparent);
+  color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);
+  font-size:10.5px;padding:0 5px;border-radius:3px;white-space:nowrap}
+
+/* ---------------------------------------------------------------- 通知（Win10 操作中心样式）
+   参考 Windows 10 右下角弹出的通知：
+     · 实心深色卡片（不是半透明亚克力 —— 操作中心是实心的）
+     · 左侧一个状态图标，右侧三行：应用名 / 标题 / 正文
+     · 圆角很小、有细边框、右下角略重的阴影
+     · 从右侧滑入，带一点纵向位移（和系统一致）
+   原来的实现是一条"左边一条彩色的横条"，观感更像网页 alert。 */
+.toast-wrap{position:fixed;right:16px;bottom:80px;display:flex;flex-direction:column;
+  gap:10px;z-index:200;max-width:calc(100vw - 32px)}
+/* 后台日志查看框：等宽、可滚动、暗底 —— 跟控制台观感一致 */
+.log-box{max-height:280px;overflow:auto;padding:8px 10px;margin:0;
+  background:rgba(0,0,0,.28);border:1px solid var(--stroke-soft);
+  border-radius:var(--r-sm);font-size:11.5px;line-height:1.5;
+  white-space:pre-wrap;word-break:break-all;color:var(--fg2)}
+.toast{
+  display:flex;gap:11px;align-items:flex-start;
+  background:#202020;color:#fff;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:4px;
+  padding:13px 15px;width:380px;max-width:min(440px,calc(100vw - 32px));
+  font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.55), 0 1px 2px rgba(0,0,0,.4);
+  animation:toast-in .22s cubic-bezier(.16,1,.3,1);
+}
+/* 左侧状态图标：用字符而不是 SVG，避免每个 toast 都要走一遍图标渲染 */
+.toast .t-ico{flex:0 0 auto;width:17px;height:17px;margin-top:1px;
+  border-radius:50%;font-size:12px;line-height:17px;text-align:center;
+  font-weight:700;color:#202020;background:#9a9a9a}
+.toast.ok .t-ico{background:#6ccb5f}
+.toast.err .t-ico{background:#ff99a4}
+.toast.warn .t-ico{background:#fce100}
+.toast .t-body{flex:1;min-width:0}
+/* 第一行应用名：Win10 通知里它最小、最淡 */
+.toast .t-app{font-size:11px;color:rgba(255,255,255,.62);
+  letter-spacing:.2px;margin-bottom:2px}
+/* 第二行标题：只有"有标题"时才出现（单行 toast 不显示） */
+.toast .t-title{font-size:13px;font-weight:600;margin-bottom:2px}
+.toast .t-msg{font-size:12.5px;line-height:1.55;color:rgba(255,255,255,.92);
+  word-break:break-word}
+.toast .t-msg b{color:#fff}
+.toast .t-msg .mono{font-size:11.5px}
+.toast .t-x{flex:0 0 auto;cursor:pointer;opacity:.5;font-size:14px;line-height:1;
+  padding:1px 2px;border-radius:3px}
+.toast .t-x:hover{opacity:1;background:rgba(255,255,255,.12)}
+@keyframes toast-in{
+  from{transform:translate(26px,10px);opacity:0}
+  to{transform:none;opacity:1}
+}
+
+.diff-line{display:flex;gap:9px;align-items:center;padding:7px 10px;font-size:12.5px;border:1px solid var(--line);border-left-width:4px;border-radius:var(--r)}
+.diff-line.copy{border-left-color:var(--accent-link)}
+.diff-line.trash,.diff-line.delete{border-left-color:var(--danger)}
+.diff-line.rename{border-left-color:var(--tile-purple)}
+.diff-line .op{font-weight:600;width:60px;flex:0 0 auto}
+
+.progress{height:4px;background:#3D3D3D;overflow:hidden;border-radius:2px}
+.progress > i{display:block;height:100%;background:var(--accent);transition:width .3s}
+
+/* ------------------------------------------------------------ 查重 */
+.dup-group{
+  border:1px solid var(--line);margin-bottom:12px;overflow:hidden;background:var(--surface);
+  border-radius:var(--r);box-shadow:var(--shadow-2);
+}
+.dup-hd{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:var(--surface-2);border-bottom:1px solid var(--line);flex-wrap:wrap;
+}
+.dup-hd .t{font-weight:600;font-size:14px}
+/* 被用户取消勾选的组：整组压暗，一眼能看出它不参与清理 */
+.dup-group.skipped{opacity:.52}
+.dup-group.skipped .dup-hd{background:#2A2622}
+.dup-hd .check{margin-right:2px}
+.dup-hd > .check > input{width:15px;height:15px}
+.dup-item{display:flex;gap:11px;align-items:center;padding:9px 14px;border-bottom:1px solid #2A2A2A;transition:background .12s}
+.dup-item:last-child{border-bottom:0}
+.dup-item:hover{background:rgba(255,255,255,.045)}
+.dup-item.keep{background:rgba(108,203,95,.12);box-shadow:inset 3px 0 0 var(--ok)}
+.dup-item .why{font-size:11.5px;color:var(--fg3)}
+.dup-item .q{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;min-width:70px;text-align:right}
+.srcpath{font-family:"Cascadia Mono",Consolas,monospace;font-size:11.5px;color:var(--fg3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;direction:rtl;text-align:left}
+.side-L{color:var(--left);font-weight:600}
+.side-R{color:var(--right);font-weight:600}
+.kv{display:grid;grid-template-columns:92px 1fr;gap:5px 12px;font-size:13px}
+.kv .k{color:var(--fg3)}
+.hl{background:var(--accent);color:#fff;padding:0 2px;border-radius:2px}
+
+/* ------------------------------------------------------------ 右键菜单 */
+.ctx-menu{
+  position:fixed;z-index:300;min-width:210px;
+  background:var(--acrylic);border:1px solid rgba(255,255,255,.12);
+  border-radius:var(--r);box-shadow:var(--shadow-64);
+  padding:5px;display:flex;flex-direction:column;gap:1px;
+  animation:ctx-in .1s ease-out;
+}
+@keyframes ctx-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@supports (backdrop-filter:blur(2px)){
+  .ctx-menu{
+    background:rgba(32,32,32,.9);
+    -webkit-backdrop-filter:blur(20px) saturate(120%);
+    backdrop-filter:blur(20px) saturate(120%);
+  }
+}
+.ctx-item{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  background:transparent;border:0;color:var(--fg);cursor:pointer;
+  padding:9px 11px;font-size:13px;border-radius:var(--r-sm);min-height:36px;
+}
+.ctx-item:hover:not([disabled]),.ctx-item:focus-visible{background:rgba(255,255,255,.1)}
+.ctx-item[disabled]{opacity:.4;cursor:not-allowed}
+.ctx-item.danger{color:#FFB3B3}
+.ctx-item.danger:hover{background:var(--danger-bg)}
+.ctx-item .ico{width:15px;height:15px;flex:0 0 15px;opacity:.9}
+.ctx-sep{height:1px;background:var(--line);margin:4px 6px}
+
+/* 文件夹行尾的操作按钮：平时淡一点，悬停整行时明显 */
+table.fb-table tr.fb-dir .fb-dir-act{width:52px;text-align:right}
+table.fb-table tr.fb-dir [data-dir-menu]{
+  opacity:.35;font-weight:700;font-size:15px;line-height:1;letter-spacing:1px;
+}
+table.fb-table tr.fb-dir:hover [data-dir-menu],
+table.fb-table tr.fb-dir [data-dir-menu]:focus-visible{opacity:1}
+@media (hover:none){
+  table.fb-table tr.fb-dir [data-dir-menu]{opacity:.8;width:34px;height:34px}
+}
+
+/* ------------------------------------------------------------ 文件夹选择器（可搜索） */
+#fp-q{flex:1;min-height:36px}
+.fp-hit{color:var(--accent-link);font-weight:600}
+
+/* 文件浏览工具栏里的搜索框 */
+.fb-search{display:flex;align-items:center;gap:6px;flex:1;min-width:220px;max-width:460px}
+.fb-search input{min-height:32px}
+
+/* 智能整理里的分组行 */
+tr.og-grp{cursor:default}
+tr.og-grp:hover td{background:rgba(255,255,255,.04)}
+tr.og-grp td:first-child{text-align:center}
+
+/* 智能整理的分区（收纳区选择 / 孤曲策略） */
+.og-sec{border:1px solid var(--stroke-soft);border-radius:var(--r);
+  padding:8px 10px;margin-bottom:8px;background:rgba(255,255,255,.02)}
+.og-sec>summary{cursor:pointer;font-weight:600;font-size:12.5px;
+  color:var(--fg);list-style:none;display:flex;align-items:center;gap:6px}
+/* ★ 藏掉浏览器**原生** disclosure 三角。
+   它由浏览器绘制，展开/收起时**浏览器自己做动画** —— 页面 CSS 管不到，
+   `transition:none` 也压不住（只能藏掉它）。改用 JS 塞进来的 `.oga` 文本箭头，
+   在 `toggle` 事件里直接换字符，没有任何过渡可言。 */
+.og-sec>summary{list-style:none}
+.og-sec>summary::-webkit-details-marker{display:none}
+.og-sec>summary::marker{content:''}
+/* 原 `::before` 旋转箭头已由 `.oga` 文本箭头取代（见 organize.js 的 toggle 处理） */
+.og-sec>summary:hover{color:var(--accent-link)}
+.og-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.og-chips .chip{cursor:pointer;user-select:none}
+.og-sec .hint{margin-top:6px}
+
+/* ------------------------------------------------------------ 候选区（跨目录暂存） */
+#fb-stage{display:none;border-top:1px solid var(--stroke);background:var(--acrylic);
+  backdrop-filter:blur(14px);max-height:44vh;overflow:auto;padding:0}
+#fb-stage.has-items{display:block}
+.stg-empty{padding:14px 16px;font-size:12.5px;line-height:1.7}
+.stg-head{display:flex;align-items:center;gap:8px;padding:8px 12px;
+  position:sticky;top:0;z-index:3;background:var(--acrylic);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--stroke-soft);font-size:12.5px}
+.stg-warn{color:#ffb3b3;background:rgba(255,107,107,.14);border-radius:var(--r-sm);
+  padding:1px 7px;font-size:11.5px}
+.stg-chip{display:inline-flex;align-items:center;gap:5px;cursor:pointer;
+  border:1px solid var(--c);color:var(--c);border-radius:999px;padding:1px 9px;
+  font-size:11.5px;background:color-mix(in srgb,var(--c) 14%,transparent)}
+.stg-chip:hover{background:color-mix(in srgb,var(--c) 26%,transparent)}
+.stg-note{padding:6px 14px;font-size:12px;color:#ffb3b3;
+  background:rgba(255,107,107,.08)}
+.stg-bulk{display:flex;align-items:center;gap:8px;padding:7px 12px;
+  background:rgba(76,194,255,.10);border-bottom:1px solid var(--stroke-soft);
+  font-size:12.5px;position:sticky;top:41px;z-index:2}
+.stg-list{overflow:auto}
+.stg-table td{padding:4px 8px;vertical-align:middle}
+.stg-name{display:flex;align-items:center;gap:6px;min-width:0}
+.stg-swatch{width:4px;height:22px;border-radius:2px;flex:0 0 auto}
+.stg-row:hover td{background:rgba(255,255,255,.05)}
+.stg-act{white-space:nowrap}
+.cover.xs{width:24px;height:24px;border-radius:3px;object-fit:cover;flex:0 0 auto}
+.cover.xs.ph{background:rgba(255,255,255,.07);display:inline-block}
+
+/* 文件表格里，已进候选区的行按去向颜色标出来 */
+tr.fb-file.staged{box-shadow:inset 3px 0 0 var(--c,transparent)}
+tr.fb-file.staged td:first-child{position:relative}
+/* 已在候选区里的文件：勾选框禁用并压暗，整行也稍微淡一点 ——
+   一眼就能看出"这个已经选过了，不用再选"。
+   之前只加个小标签，勾选框照样亮着能点，看着像没生效。 */
+tr.fb-file.staged input[type=checkbox]:disabled{
+  opacity:.35;cursor:not-allowed;accent-color:var(--fg3)}
+tr.fb-file.staged .fb-name{opacity:.82}
+.staged-tag{font-size:11px;white-space:nowrap}
+/* 目录树的半选（indeterminate）也要有明确观感，不能跟全选一个样子 */
+.fb-node .fb-pick:indeterminate{accent-color:var(--accent);opacity:1}
+.fb-node .fb-pick[data-cover="some"]{outline:1px dashed color-mix(in srgb,var(--accent) 70%,transparent);
+  outline-offset:1px;border-radius:2px}
+
+/* ------------------------------------------------------------ 候选区：列组显示 */
+/* 每个目标目录一列，列头带该去向的颜色；列内是待移动的文件。
+   去向数量不设上限，颜色循环复用（列头写了完整路径，不会看混）。 */
+.stg-cols{display:flex;gap:10px;overflow-x:auto;padding:10px 12px;align-items:flex-start}
+.stg-col{flex:0 0 300px;min-width:280px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);
+  border-top:3px solid var(--c);border-radius:var(--r);
+  background:color-mix(in srgb,var(--c) 8%,transparent);display:flex;flex-direction:column;
+  max-height:38vh}
+.stg-col-pending{border-style:dashed}
+.stg-col-hd{display:flex;align-items:center;gap:7px;padding:7px 9px;
+  border-bottom:1px solid var(--stroke-soft);flex:0 0 auto}
+.stg-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 22%,transparent)}
+.stg-col-title{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.35}
+.stg-col-title b{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stg-col-title .muted{font-size:10.5px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;direction:rtl;text-align:left}
+.stg-col-n{font-size:11px;color:var(--fg2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.stg-col-list{overflow-y:auto;padding:4px;display:flex;flex-direction:column;gap:2px}
+.stg-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:var(--r-sm);
+  background:rgba(255,255,255,.03)}
+.stg-item:hover{background:rgba(255,255,255,.07)}
+/* 候选区里的失效项：文件在磁盘上已经找不到了（被移走/删掉/盘没连上）。
+   置灰 + 划掉，但**不自动移除** —— 是删掉这条还是再找找，由用户决定。 */
+.stg-item.stale{opacity:.5}
+.stg-item.stale .stg-item-main .ell{text-decoration:line-through}
+.stg-item.unknown{opacity:.75}
+.stg-badge{display:inline-block;margin-left:6px;padding:0 5px;border-radius:3px;
+  font-size:10.5px;line-height:15px;vertical-align:1px;font-weight:600}
+.stg-badge.err{background:color-mix(in srgb,var(--danger) 26%,transparent);color:var(--danger)}
+.stg-badge.warn{background:color-mix(in srgb,var(--warn) 24%,transparent);color:var(--warn)}
+
+.stg-item-main{flex:1;min-width:0;font-size:12px}
+.stg-item-act{display:flex;gap:1px;flex:0 0 auto;opacity:.55;transition:opacity .12s}
+.stg-item:hover .stg-item-act{opacity:1}
+
+/* ------------------------------------------------------------ 文件夹选择器：多选 */
+.fp-bulk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:6px 8px;margin-bottom:6px;border:1px solid var(--stroke-soft);
+  border-radius:var(--r);background:rgba(255,255,255,.03);font-size:12.5px}
+.fp-c{width:32px;text-align:center}
+tr.picked td{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+tr.picked td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+/* 从曲库浏览定位过来的那一行 */
+tr.found td{background:color-mix(in srgb,var(--warn) 20%,transparent)}
+tr.found{outline:1px solid var(--warn);outline-offset:-1px}
+/* ------------------------------------------------------------ 智能整理：表单与目标目录汇总 */
+/* 分段选择器（①按什么分组 / ②目录结构） */
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px;padding:3px;
+  background:rgba(255,255,255,.045);border:1px solid var(--stroke-soft);
+  border-radius:var(--r);margin-top:4px}
+.seg .chip{cursor:pointer;border:1px solid transparent;background:transparent;
+  padding:5px 13px;font-size:12.5px;border-radius:var(--r-sm);color:var(--fg2);
+  transition:background .12s,color .12s}
+.seg .chip:hover:not(:disabled){background:rgba(255,255,255,.07);color:var(--fg)}
+.seg .chip.on{background:var(--accent);color:#04202e;font-weight:600;
+  border-color:color-mix(in srgb,var(--accent) 70%,transparent)}
+.seg .chip:disabled{cursor:not-allowed;opacity:.5}
+
+/* 表单字段：标签 + 控件 + 一行说明 */
+.field{margin-bottom:13px}
+.field > label{display:block;font-size:12.5px;font-weight:600;
+  color:var(--fg);margin-bottom:2px}
+.field .hint{font-size:11.5px;color:var(--fg2);line-height:1.6;margin-top:5px}
+details.og-sec .field > label{font-weight:500}
+
+/* 目标目录汇总 */
+.og-folders{border:1px solid var(--stroke-soft);border-radius:var(--r);
+  background:rgba(255,255,255,.028);padding:9px 11px;margin-bottom:10px}
+.og-folders-hd{display:flex;align-items:baseline;gap:9px;margin-bottom:7px;flex-wrap:wrap}
+.og-folders-hd b{font-size:12.5px}
+.og-folders-hd .muted{font-size:11.5px}
+.og-folders-list{display:flex;flex-wrap:wrap;gap:5px}
+.og-folder-tag{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;
+  font-family:var(--mono,monospace);padding:3px 8px;border-radius:var(--r-sm);
+  background:rgba(76,194,255,.1);border:1px solid rgba(76,194,255,.3);color:var(--fg)}
+.og-folder-tag b{font-family:inherit;color:var(--accent);font-size:11px}
+
+/* 通用细进度条 */
+.pbar{height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden}
+.pbar > i{display:block;height:100%;background:var(--accent);
+  border-radius:3px;transition:width .3s ease}
+
+/* ------------------------------------------------------------ 入库查重提示 */
+.dup-banner{border:1px solid color-mix(in srgb,#ffd166 45%,transparent);
+  border-left:3px solid #ffd166;border-radius:var(--r);
+  background:color-mix(in srgb,#ffd166 9%,transparent);
+  padding:9px 12px;margin-bottom:10px}
+.dup-banner-hd{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px}
+.dup-banner-hd .ico{color:#ffd166;flex:0 0 auto}
+.dup-flag{display:flex;align-items:center;gap:4px;font-size:10.5px;margin-top:2px;
+  color:#ffd166;line-height:1.3}
+.dup-flag .ico{width:11px;height:11px;flex:0 0 auto}
+.dup-flag span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dup-flag.likely{color:#ffb86b}
+
+/* 整块失效时灰掉：让"现在用不上"一眼可见。
+   注意只加在**真正失效的那一块**上，别把还在用的控件（比如策略单选按钮）也灰了。 */
+.dim{opacity:.45;filter:saturate(.35)}
+.dim input[disabled]{cursor:not-allowed}
+.dim .wiz-scope{pointer-events:none}
+
+/* 分组行的展开按钮：收起时指向右，展开时转 90°。
+   **保留旋转**（方向要看得出展开/收起），但去掉过渡动画 ——
+   用户明确不要那个动画，点一下箭头慢慢转会有拖沓感。 */
+/* ★ `.og-exp` 已改成**纯文本箭头**（`organize.js` 里直接换字符 ▸ / ▾）。
+   原来是"给 SVG 图标加 .open 类 → CSS 旋转 90°"，用户反复反馈
+   那个箭头会"从左往右滑过来"、并且**失焦时出现**；把过渡一条条去掉都没根治。
+   换成字符替换之后，没有 transform、没有 transition，动画不可能存在。
+   下面这两条旋转规则保留成**死代码兼容**（万一还有旧 DOM），实际已不生效。 */
+.og-exp .oga{font-size:13px;line-height:1;color:var(--fg2);
+  /* 双保险：即使将来有人给它加过渡，这里也压住 */
+  transition:none !important;animation:none !important}
+.og-exp .ico{transition:none}
+.og-exp.open .ico{transform:rotate(90deg)}
+.og-plan tr.og-items > td{background:rgba(255,255,255,.035);
+  padding:8px 10px 10px;border-top:1px solid var(--stroke-soft)}
+.og-items-hd{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;
+  font-size:12px;margin-bottom:6px}
+.og-items-tbl tr.og-here td{background:color-mix(in srgb,#7ee787 10%,transparent)}
+.og-items-tbl tr.og-here td:first-child{box-shadow:inset 3px 0 0 #7ee787}
+
+/* ------------------------------------------------------------ 文件浏览：目录树多选 + 拖拽导入 */
+/* 宽度和边框由 wrap 负责；`.fb-tree` 只管滚动（原来两边都定了 width/flex/overflow，
+   规则打架，还和多选条的出现/消失一起把高度搞得跳来跳去）。
+
+   **高度必须是明确的**：实测过，这一列用 `flex:1` 会塌成 0 ——
+   `.fb-split{flex:1}` 在 `min-height:auto` 下按内容算高度，而内容本身
+   又是 `overflow:hidden` 的 flex 项，最终整列被裁到只剩 2px，
+   树完全看不见（`60vh` 试验里立刻变成 192px 正常）。
+   所以这里用视口高度兜底，配合 min-height 保证不会太小。 */
+.fb-tree-wrap{
+  width:290px;flex:0 0 290px;
+  height:calc(100vh - 330px);min-height:240px;
+  display:flex;flex-direction:column;align-items:stretch;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  overflow:hidden;
+}
+.fb-tree-wrap .fb-tree{flex:1 1 auto;min-height:0;overflow:auto;
+  padding:6px 0;border:0;width:auto;background:transparent;border-radius:0}
+.fb-tree-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  flex:0 0 auto;padding:7px 8px;border-top:1px solid var(--line);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);font-size:12px}
+.fb-tree-bar .grow{flex:1}
+
+/* 多选：用**真正的 checkbox**，一直可见 ——
+   原来是个自绘的小方块、默认 opacity:0，只有悬停才隐约出现，
+   用户根本看不到可以勾，也就不知道能多选。 */
+.fb-node .fb-pick{
+  flex:0 0 auto;width:14px;height:14px;margin:0 2px 0 0;
+  accent-color:var(--accent);cursor:pointer;
+}
+.fb-node.picked{background:color-mix(in srgb,var(--accent) 16%,transparent);
+  border-left-color:var(--accent)}
+.fb-node.picked .n{font-weight:600}
+
+/* 拖拽落点提示：必须明确显示"会放到哪" */
+.fb-list{position:relative}
+.fb-drop-overlay{position:absolute;inset:0;z-index:40;
+  background:color-mix(in srgb,var(--accent) 14%,rgba(0,0,0,.55));
+  border:2px dashed var(--accent);border-radius:var(--r);
+  display:flex;align-items:center;justify-content:center;pointer-events:none}
+.fb-drop-box{text-align:center;padding:18px 26px;border-radius:var(--r-lg);
+  background:rgba(0,0,0,.6);border:1px solid var(--stroke-soft)}
+.fb-drop-box .big{font-size:26px;margin-bottom:6px}
+.fb-drop-box .muted{font-size:12px;margin-top:4px}
+
+/* ------------------------------------------------------------ 中转站容量条 */
+.stor-bar{position:relative;height:22px;border-radius:var(--r-sm);overflow:hidden;
+  background:rgba(255,255,255,.07);border:1px solid var(--stroke-soft);
+  margin-bottom:10px}
+.stor-fill{position:absolute;inset:0 auto 0 0;background:var(--accent);
+  transition:width .3s ease}
+.stor-bar.warn .stor-fill{background:linear-gradient(90deg,#ffb86b,#ff6b6b)}
+.stor-text{position:relative;display:block;text-align:center;line-height:22px;
+  font-size:11.5px;color:var(--fg);text-shadow:0 1px 2px rgba(0,0,0,.6)}
+
+/* 文件列表里"目录树选中结果"的说明条 */
+/* 「本层没有文件，歌在子目录里」的提示条。
+   之前是内联样式 + `var(--bg2, #f6f7f9)` —— 暗色主题里 --bg2 不存在，
+   直接 fallback 成浅灰，在纯黑界面上是一块很突兀的白块。
+   现在改成跟主题一致的组件：左侧强调色竖条 + 图标 + 两行文字 + 右侧主按钮。 */
+.fb-subhint{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:10px 14px;margin:0 0 10px;
+  background:var(--surface-2);
+  border:1px solid var(--line);
+  border-left:3px solid var(--accent);
+  border-radius:var(--r);
+  color:var(--fg2);font-size:12.5px;line-height:1.55;
+}
+.fb-subhint>.ico{width:20px;height:20px;flex:none;
+  color:var(--accent-link);opacity:.85}
+.fb-subhint .fb-sh-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.fb-subhint .fb-sh-txt>b{color:var(--fg);font-weight:600;font-size:13px}
+.fb-subhint .fb-sh-num{color:var(--accent-link);font-weight:600;
+  font-variant-numeric:tabular-nums;padding:0 1px}
+.fb-subhint .btn{margin-left:auto;flex:none}
+@media (max-width:720px){
+  .fb-subhint{gap:8px}
+  .fb-subhint .btn{margin-left:0;width:100%;justify-content:center}
+}
+
+.fb-tree-result{padding:7px 12px;font-size:12.5px;color:var(--fg2);
+  background:color-mix(in srgb,var(--accent) 10%,transparent);
+  border-bottom:1px solid var(--stroke-soft)}
+
+/* 高风险确认里列出的受影响对象 */
+.hard-list{margin-top:10px;padding:8px 10px;max-height:150px;overflow:auto;
+  background:color-mix(in srgb,var(--danger) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);
+  border-radius:var(--r-sm);font-size:12px;line-height:1.8}
+.hard-list .mono{word-break:break-all}
+
+/* ============================================================
+   细节打磨：字体 / 控件 / 图标
+
+   放在最后是为了**覆盖**前面那些零散的字号声明 ——
+   前面几百行是逐步长出来的，字号从 9.5 到 12.5 有七八档，
+   相邻两档差 0.5px 肉眼分不出来，只会显得没对齐。
+   这里统一收敛，同时把中文小字的下限提到 11px。
+   ============================================================ */
+
+/* 中文在极小字号下笔画会糊在一起，兜住下限。
+   注意**别用** `max(--fs-cap, 0.8em)`：`em` 是相对**父元素**的，
+   嵌套几层之后算出来的值飘忽不定，同一个"辅助文字"在不同位置大小不一 ——
+   那不叫统一，只是看着像。这里一律用固定档位。 */
+.muted,.chip,.hint{font-size:var(--fs-sm)}
+td,th{font-size:var(--fs)}
+.tag,.badge{font-size:var(--fs-cap)}
+.mono{font-size:var(--fs)}      /* 等宽字不再另设一档，否则同行会跳 */
+.muted{color:var(--fg3)}
+.hint{color:var(--fg3);line-height:var(--lh)}
+
+/* 控件高度对齐到 32 / 28 两档（1903 的规格），
+   并要求 flex 容器里的控件视觉居中，避免"有的高有的矮" */
+.btn,.chip,select,input[type=text],input[type=search],input[type=number],
+input[type=password],.field input,.field select{min-height:var(--ctl-h)}
+
+/* ---------------------------------------------------------------- 窄屏不撑破容器
+   ★ 这一条是"小屏幕上显示不全"的**根因**。
+
+   浏览器的 UA 样式给 `input` 一个**内在宽度**（约 20 个字符 ≈ 349px），
+   而项目里**没有任何规则设置 `width:100%`**。于是窄屏时：
+
+       input(349) → .field(351) → .card(377) → 超过 grid 轨道(336)
+
+   `.card` 比容器宽 41px，左边被挤出去、右边被裁掉 ——
+   用户看到的就是"设置页面显示不全"（`数据库大小` 标签只剩半个字）。
+
+   flex/grid 的子项默认 `min-width:auto`，意思是"不小于我的内容宽度"，
+   所以它会**拒绝收缩到内容宽度以下**。修法两条：
+     1. 控件宽度跟着容器走（100%）；
+     2. 允许 flex/grid 子项收缩到内容宽度以下（min-width:0）。
+   两者缺一，都会在小屏上重新撑破。 */
+.field input,.field select,.field textarea{width:100%;min-width:0;box-sizing:border-box}
+.grid > *,.row > *,.grid.c2 > *,.grid.c3 > *{min-width:0}
+.card,.card > *{min-width:0}
+
+/* 弹窗和工具条里那些**不在 .field 里面**的输入框（例如各视图工具条的搜索框、
+   对话框里的路径框）也一起收口。不设 `width:100%`（那会把它们拉满整行，
+   破坏原有的按需宽度），只保证"绝不超出容器"。
+   范围限定在文字/搜索/数字/密码四类，**不含** `[type=range]`
+   （播放进度条宽度是 flex 控制的）和 `input[type=checkbox]`。 */
+input[type=text],input[type=search],input[type=number],input[type=password],
+textarea,select{max-width:100%}
+.modal input[type=text],.modal input[type=search],.modal input[type=number],
+.modal input[type=password],.modal textarea,.modal select{min-width:0}
+
+/* 长路径 / 长提示文字要能断行。
+   `C:\Users\Administrator\.music-sync-hub\logs\msh.log` 这种**没有空格**的串，
+   浏览器默认不会在中间断开（`overflow-wrap:normal`），于是一个 344px 的
+   span 就把 360px 的窗口撑出 9px。`.mono`（等宽）和提示类文字尤其容易。
+   用 `anywhere` 而不是 `break-word`：前者才影响 min-content 宽度，
+   也就是才真的能让 flex/grid 子项收缩下来。 */
+.mono,.hint,.muted,.badge,.srcpath{overflow-wrap:anywhere}
+/* 说明性段落（中部那些中文提示）同理：中文能断，但夹在中间的长英文/路径不能，
+   统一允许任意处断行。这些选择器都不涉及表格（表格在可横向滚动的容器里）。 */
+.card,.field,.hint,.muted,.nav-fallback,.busy-bar{overflow-wrap:anywhere}
+.btn.sm,.chip,.btn.icon.sm{min-height:var(--ctl-h-sm)}
+.field input,.field select{min-height:var(--ctl-h)}
+select,input[type=text],input[type=search],input[type=number]{padding:5px 9px}
+.toolbar{align-items:center;row-gap:8px}
+.toolbar>*{flex-shrink:0}
+
+/* ★ 工具条里的**纯文字**要允许收缩换行，按钮/控件才保持不缩。
+   原来 `.toolbar>*{flex-shrink:0}` 对所有子项一刀切，于是设置页工具条里
+   那句"日志同时写到 <很长的路径>"在窄窗口里**一点都不缩**，
+   直接把页面撑出去（实测 360px 时溢出 9px）。
+   文字收缩不会破坏布局；按钮不缩才有意义（避免被压成两个字）。 */
+.toolbar>.muted,.toolbar>.hint,.toolbar>.mono,.toolbar>span{
+  flex-shrink:1;min-width:0;overflow-wrap:anywhere}
+.toolbar input[type=text]{flex-shrink:1}
+
+/* 图标：统一跟随文字颜色、统一描边粗细，避免"有的粗有的细" */
+.ico{stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;
+  vertical-align:-2px}
+.btn .ico,.chip .ico{stroke-width:1.7}
+.btn.icon{padding:0;display:inline-flex;align-items:center;justify-content:center;
+  width:var(--ctl-h);height:var(--ctl-h)}
+.btn.icon.sm{width:var(--ctl-h-sm);height:var(--ctl-h-sm)}
+.btn.icon svg{width:15px;height:15px}
+.btn.icon.sm svg{width:13px;height:13px}
+
+/* 禁用态：1903 是"整块压暗"，而不是只把字变灰 */
+.btn:disabled,.chip:disabled,select:disabled,input:disabled{
+  opacity:.42;cursor:not-allowed;filter:saturate(.5)}
+.btn:disabled:hover{background:inherit;border-color:var(--stroke-soft)}
+
+/* 表格：数字列右对齐 + 等宽，横着扫一眼就能比大小 */
+table.data td.num,table.data th.num{font-variant-numeric:tabular-nums}
+table.data tbody tr{transition:background .12s ease}
+/* 悬停用一个稳定的浅色，别用 accent 混色（深浅主题下观感差很多） */
+table.data tbody tr:hover{background:rgba(255,255,255,.055)}
+
+/* 长文本统一省略号，避免撑破表格把布局挤歪 */
+.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 卡片间距统一（各视图自己 padding 不一时，视觉节奏会乱） */
+.card{padding:14px 16px}
+.card>h3:first-child{margin-top:0}
+.card>h3{font-size:var(--fs-lg);font-weight:600;margin:0 0 10px}
+
+/* 页面级标题（1903 是细体大字） */
+.page-title{font-size:var(--fs-xl);font-weight:300;letter-spacing:.2px}
+.page-sub{color:var(--fg3);font-size:var(--fs-sm);line-height:var(--lh)}
+
+/* 设置页：偏好记忆总览 */
+
+/* 状态点/徽标不因字号而错位 */
+.badge,.tag{line-height:1.5;vertical-align:middle}
+
+/* ============================================================
+   小屏适配：顶端工具栏不能"显示不全"
+
+   问题是工具栏里塞了太多控件（数据源、搜索、模糊、排序、升降序、
+   无损、码率、封面、重置、模式切换、加载更多、计数、显示列、导出），
+   窄屏下横向溢出，最右边那些按钮直接看不见也点不到。
+
+   处理办法：允许换行 + 让长控件收缩 + 次要控件在小屏收起。
+   ============================================================ */
+@media (max-width: 1180px){
+  /* 让计数之类不占位置 */
+  .toolbar #lb-info{font-size:var(--fs-cap)}
+  .toolbar{row-gap:6px}
+}
+@media (max-width: 980px){
+  /* 次要筛选控件先让步：它们都能在别处或在宽屏时再用 */
+  .toolbar #lb-desc,.toolbar #lb-covers,
+  .toolbar .only-wide{display:none !important}
+  .toolbar input[type=text]{min-width:140px}
+  #lb-src,.toolbar select{min-width:110px}
+  .busy-bar{font-size:var(--fs-cap);padding:6px 10px}
+}
+@media (max-width: 780px){
+  /* 再窄就只留最核心的：数据源 + 搜索 + 排序 + 操作按钮 */
+  .toolbar #lb-br,.toolbar #lb-ll,.toolbar #lb-fuzzy,
+  .toolbar .only-wide{display:none !important}
+  .toolbar{gap:6px}
+  .toolbar .sep-v{display:none}
+  .btn span{white-space:nowrap}
+  .page-title{font-size:20px}
+  .grid.c2{grid-template-columns:1fr !important}
+  .player .now{max-width:36%}
+  .alb-grid{grid-template-columns:1fr}
+  .card{padding:11px 12px}
+  /* 表格允许横向滚动，而不是把列挤没 */
+  .tbl-wrap{overflow-x:auto}
+}
+@media (max-width: 560px){
+  .toolbar #lb-sort{display:none}
+  .player .now{display:none}
+  .page-sub{font-size:var(--fs-cap)}
+  .hard-list{max-height:110px}
+  .modal,.dlg{width:calc(100vw - 20px) !important;max-width:calc(100vw - 20px)}
+}
+/* 工具栏永远允许换行：宁可占两行，也不要把按钮藏到看不见的地方 */
+.toolbar{flex-wrap:wrap}
+.player-ctl{flex-wrap:wrap;row-gap:4px}
+.pref-list{display:flex;flex-direction:column;gap:4px;font-size:12.5px;
+  max-height:280px;overflow:auto}
+.pref-row{display:flex;gap:10px;align-items:baseline;
+  padding:4px 0;border-bottom:1px dashed var(--stroke-soft)}
+.pref-row:last-child{border-bottom:0}
+.pref-k{flex:0 0 44%;color:var(--fg2)}
+.pref-v{flex:1;min-width:0;word-break:break-all;color:var(--fg3);font-size:11.5px}
+
+/* ------------------------------------------------------------ 磁盘余量条 */
+.disk-chip{display:flex;align-items:center;gap:6px;font-size:11.5px;
+  color:var(--fg2);flex:0 0 auto}
+.dk-bar{width:60px;height:7px;border-radius:4px;overflow:hidden;
+  background:rgba(255,255,255,.10);border:1px solid var(--stroke-soft);
+  display:inline-block}
+.dk-bar>i{display:block;height:100%;background:var(--accent)}
+.dk-bar.warn>i{background:var(--warn,#FFD24C)}
+.dk-bar.tight>i{background:var(--danger)}
+.dk-txt b{color:var(--fg)}
+
+/* 侧栏收起后补在视图顶部的导航入口（数据源切换 / 选目录 / 显示侧栏） */
+.nav-fallback{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:7px 11px;border-radius:var(--r);
+  background:var(--surface);border:1px dashed var(--stroke-soft)}
+.nav-fallback .ico{width:14px;height:14px}
+
+/* ------------------------------------------------------------ 曲库：专辑视图 */
+/* 做成"卡片网格 + 可展开曲目"，比纯表格更像网页播放器，
+   也比平铺长列表更容易一眼找到一张专辑。 */
+.alb-grid{display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+.alb-card{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column}
+.alb-hd{display:flex;gap:11px;align-items:center;padding:10px 12px}
+.alb-cover{width:54px;height:54px;flex:0 0 54px;border-radius:var(--r-sm);
+  overflow:hidden;background:var(--bg-nav);display:flex;align-items:center;
+  justify-content:center;color:var(--fg3)}
+.alb-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.alb-meta{flex:1;min-width:0}
+.alb-title{font-size:13.5px;font-weight:600;line-height:1.35;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alb-sub{font-size:11.5px;color:var(--fg3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alb-act{display:flex;gap:5px;flex:0 0 auto}
+.alb-tracks{border-top:1px solid var(--line);max-height:46vh;overflow:auto}
+.alb-tr{display:flex;align-items:center;gap:9px;padding:5px 12px;
+  font-size:12.5px;cursor:pointer;border-left:3px solid transparent}
+.alb-tr:hover{background:rgba(255,255,255,.06)}
+.alb-tr.playing{border-left-color:var(--accent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 11%,transparent)}
+.alb-tr .alb-n{width:20px;text-align:right;color:var(--fg3);font-size:11px;
+  flex:0 0 20px}
+.alb-tr>span:nth-child(2){flex:1;min-width:0}
+.alb-tr .btn{opacity:0}
+.alb-tr:hover .btn{opacity:1}
+
+/* ------------------------------------------------------------ 播放队列面板 */
+.q-list{max-height:52vh;overflow:auto;margin:-4px -4px 0}
+.q-item{display:flex;align-items:center;gap:10px;padding:6px 8px;
+  border-radius:var(--r-sm);cursor:pointer;border-left:3px solid transparent}
+.q-item:hover{background:rgba(255,255,255,.06)}
+.q-item.cur{border-left-color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.q-i{width:18px;text-align:center;color:var(--fg3);font-size:11.5px;flex:0 0 18px}
+.q-item.cur .q-i{color:var(--accent)}
+.q-item .q-i .ico{width:13px;height:13px}
+.q-meta{flex:1;min-width:0}
+
+/* 播放器上的模式按钮（随机 / 循环 / 队列） */
+#btn-shuffle.on,#btn-loop.on,#btn-queue.on{color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.q-count{position:absolute;transform:translate(11px,-10px);
+  font-size:9.5px;background:var(--accent);color:#fff;border-radius:8px;
+  padding:0 4px;line-height:14px;min-width:14px;text-align:center}
+#btn-queue{position:relative}
+
+/* 正在播放的那一行 */
+tr.playing{background:color-mix(in srgb,var(--accent) 11%,transparent)}
+tr.playing .fb-name>span:first-of-type,tr.playing td{color:var(--accent)}
+[data-play-id].playing .cover{outline:2px solid var(--accent)}
+
+/* ------------------------------------------------------------ 多页面占用提示 */
+/* 别的页面在执行任务时，本页顶部显示一条提示，并禁掉会冲突的写操作。
+   做成常驻细条而不是弹窗 —— 它是**持续状态**，弹窗会一直挡着人。 */
+.busy-bar{display:flex;align-items:center;gap:9px;padding:7px 16px;
+  font-size:12.5px;color:var(--fg);
+  background:color-mix(in srgb,var(--warn,#ffb86b) 16%,var(--surface));
+  border-bottom:1px solid var(--stroke-soft)}
+.busy-bar .spinner{width:12px;height:12px;border-width:2px}
+/* 别人在忙时，会写文件的按钮统一压暗（但保持可见，让人知道"在哪"） */
+body.task-busy [data-exclusive]:disabled{opacity:.45}
+
+/* ------------------------------------------------------------ 整理向导的步骤 */
+.wiz-steps{display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12.5px}
+.wiz-step{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--stroke-soft);color:var(--muted)}
+.wiz-step.on{border-color:var(--accent);color:var(--fg);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.wiz-step.done{border-color:var(--ok,#7ee787);color:var(--fg)}
+.wiz-step b{font-weight:600}
+.wiz-scope{max-height:26vh;overflow:auto;border:1px solid var(--stroke-soft);
+  border-radius:var(--r);padding:6px}
+.wiz-scope label{display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;
+  border-radius:var(--r-sm)}
+.wiz-scope label:hover{background:rgba(255,255,255,.05)}
+
+/* ------------------------------------------------------------ 上传入库 */
+.up-drop{border:1.5px dashed var(--stroke);border-radius:var(--r);padding:18px;
+  text-align:center;margin-bottom:10px;transition:border-color .15s,background .15s}
+.up-drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.up-drop-in{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px}
+.up-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden;margin-top:8px}
+.up-bar>i{display:block;height:100%;background:var(--accent);transition:width .2s}
+
+/* ------------------------------------------------------------ 元数据编辑 */
+.te-head{display:flex;align-items:center;gap:12px;padding-bottom:12px;
+  border-bottom:1px solid var(--stroke-soft);margin-bottom:10px}
+.te-cover{width:64px;height:64px;border-radius:var(--r);object-fit:cover;
+  flex:0 0 auto;background:rgba(255,255,255,.06);border:1px solid var(--stroke-soft)}
+.te-cover.ph{display:block}
+.te-cover-act{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.te-grid{display:flex;flex-direction:column;gap:2px}
+.te-row{display:flex;align-items:center;gap:8px;padding:3px 6px;
+  border-radius:var(--r-sm);transition:background .12s}
+.te-row:hover{background:rgba(255,255,255,.035)}
+.te-row.on{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.te-pick{width:20px;flex:0 0 20px;display:flex;justify-content:center}
+.te-label{width:74px;flex:0 0 74px;font-size:12.5px;color:var(--fg2);
+  text-align:right}
+.te-input{flex:1;min-width:0;display:flex;align-items:center;gap:8px}
+.te-input input{flex:1;min-height:30px}
+.te-cur{font-size:11px;max-width:38%;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;opacity:.65}
+.te-diff{font-size:11.5px;line-height:1.6}
+.te-diff s{opacity:.6;margin:0 4px}
+
+/* ------------------------------------------------------------ 高危操作（红色） */
+/* 统一的高危色：删除/解散/清空/覆盖/移除封面这类不可逆或会丢信息的事 */
+.btn.danger{background:transparent;border-color:var(--danger);color:#FFB3B3}
+.btn.danger:hover{background:var(--danger-bg);border-color:#FF8A8A}
+.btn.danger.solid{background:var(--danger);border-color:var(--danger);color:#2A0A0A;
+  font-weight:600}
+.btn.danger.solid:hover{background:#FF8A8A;border-color:#FF8A8A}
+.btn.sm.danger{padding:3px 9px}
+/* 菜单里的高危项 */
+.ctx-item.danger{color:#FFB3B3}
+.ctx-item.danger:hover{background:var(--danger-bg);color:#FFD1D1}
+/* 对话框里的"危险提示条" */
+.danger-note{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+  border-radius:var(--r);background:var(--danger-bg);
+  border:1px solid rgba(255,107,107,.45);font-size:12.5px;color:#FFD1D1;
+  line-height:1.6;margin-bottom:10px}
+.danger-note b{color:#FFB3B3}
+/* 图标型删除按钮：平时低调，悬停才变红，避免整屏都是红色 */
+.btn.icon.dangerish{color:var(--fg2)}
+.btn.icon.dangerish:hover{color:#FFB3B3;background:var(--danger-bg)}
+
+/* ------------------------------------------------------------ 侧栏折叠 */
+#app.nav-hidden .sidebar{display:none}
+#app.nav-hidden .topbar #btn-nav{background:rgba(255,255,255,.10)}
+
+/* ------------------------------------------------------------ 文件浏览（资源管理器式） */
+.fb-breadcrumb{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:0 0 auto;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:7px 12px;font-size:12.5px;font-family:"Cascadia Mono",Consolas,monospace;
+}
+.fb-breadcrumb a{color:var(--accent-link);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.fb-breadcrumb a:hover{text-decoration:underline}
+.fb-breadcrumb .sep{color:var(--fg3)}
+
+.fb-split{display:flex;gap:12px;min-height:0}
+/* 宽度/边框已交给 .fb-tree-wrap，这里不要再定一遍（会和外层打架） */
+.fb-node{
+  display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;font-size:13px;
+  border-left:3px solid transparent;white-space:nowrap;border-radius:0 var(--r) var(--r) 0;
+  transition:background .12s;
+}
+.fb-node:hover{background:rgba(255,255,255,.07)}
+.fb-node.active{background:rgba(255,255,255,.1);border-left-color:var(--accent)}
+.fb-node.root{font-weight:600}
+.fb-node .tw{width:12px;flex:0 0 12px;color:var(--fg3);font-size:10px;text-align:center}
+.fb-node .n{flex:1;overflow:hidden;text-overflow:ellipsis}
+.fb-node .c{
+  color:var(--fg2);font-size:11.5px;font-variant-numeric:tabular-nums;
+  background:var(--surface-2);border-radius:var(--r-sm);padding:0 6px;min-width:26px;text-align:center;
+}
+.fb-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:10px;
+  min-height:0}
+.fb-selbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:0 0 auto;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 12px;
+}
+/* 和目录树同理：这里也必须给明确高度。`flex:1` 在这个嵌套链里会算成 0，
+   文件列表就整块消失（实测 .fb-list=2px）。 */
+.fb-list{flex:1 1 auto;min-height:240px;height:calc(100vh - 400px)}
+table.fb-table td{vertical-align:middle}
+table.fb-table .fb-c{width:34px;text-align:center}
+table.fb-table .fb-name{display:flex;align-items:center;gap:9px;min-width:200px}
+table.fb-table .fb-name .cover{margin:0}
+table.fb-table .fb-act{width:44px;text-align:right}
+table.fb-table tr.fb-dir{cursor:pointer}
+table.fb-table tr.fb-dir:hover td{background:rgba(255,255,255,.06)}
+table.fb-table tr.fb-file.sel td{background:rgba(0,120,215,.16)}
+table.fb-table tr.fb-file{cursor:pointer}
+table.fb-table td.num small{font-size:11px}
+.fb-list .sortable{user-select:none}
+
+/* 移动对话框里的目标目录区 */
+.mv-dest-row{display:flex;flex-direction:column;gap:7px}
+.mv-dest-label{font-size:12.5px;color:var(--fg2)}
+.mv-dest-box{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  background:var(--surface-2);border:1px solid var(--line-2);border-radius:var(--r);
+  padding:9px 11px;
+}
+.mv-dest-path{
+  flex:1;min-width:180px;font-size:12.5px;word-break:break-all;color:var(--fg);
+}
+.mv-dest-hint{font-size:11.5px;line-height:1.6}
+
+/* ------------------------------------------------------------ 响应式（Win10 自适应思路）
+   先收起导航窗格，再隐藏标签文字，最后压缩播放条 */
+@media (max-width:840px){
+  :root{--nav-w:0px}
+  .sidebar{
+    position:fixed;left:0;top:48px;bottom:64px;width:248px;z-index:30;
+    transform:translateX(-100%);transition:transform .15s;box-shadow:none;
+  }
+  .sidebar.open{transform:none;box-shadow:8px 0 24px rgba(0,0,0,.5)}
+  .tabs{overflow-x:auto}
+  /* 窄屏下侧栏本来就是浮层，交给 .open 控制；
+     否则汉堡键切到折叠态会把浮层也一起藏死，再也点不出来 */
+  #app.nav-hidden .sidebar{display:flex}
+
+  /* 文件浏览：窄屏把目录树改成"在上方、占满整行"，不再和文件列表并排。
+     原来是写死的 `.fb-tree-wrap{width:290px;flex:0 0 290px}`，**任何宽度都不让**。
+     360px 的窗口里它吃掉 290px，留给文件列表只剩 **34px** ——
+     文件列表几乎是空的，目录树还把内容顶出屏幕。
+     侧栏用的是同一套思路（窄屏变浮层），这里顺着来：
+     竖着排，树给有限高度、自己滚，文件列表拿回整行宽度。 */
+  .fb-split{flex-direction:column}
+  .fb-tree-wrap{
+    width:auto;flex:0 0 auto;
+    height:auto;max-height:32vh;min-height:0;
+  }
+}
+@media (max-width:640px){
+  .tabs .tab span{display:none}
+  .tabs .tab{padding:0 12px}
+  .brand span{display:none}
+  .now{width:150px}
+  .player-ctl .badge.stream{display:none}
+  .view{padding:12px}
+  .modal{width:96vw !important}
+  .tiles{grid-template-columns:1fr}
+}
+
+
+
+/* ================================================================
+   展开箭头一律**瞬变**（不要过渡动画）
+
+   背景：用户反复反馈"只要有箭头的分栏按钮，点开时箭头会从左往右滑过来"。
+   我做了这些排查：
+     1. 全量搜 CSS 的 @keyframes / transition —— 只剩 spin/pulse/入场动画；
+     2. 全量搜 JS 的 style.transition —— 只有 toast 关闭那一处；
+     3. 扫描**所有按钮**的计算样式 —— `.btn` 上的 `transform .06s`
+        已确认为元凶之一并去掉（无条件写在基础规则上，
+        会把"被父级布局带着走"也变成动画）；
+     4. 静态审计**服务实际发出的 CSS** —— 已无任何按钮/箭头带 transform 过渡；
+     5. 逐帧采样角度 —— 无法在本机复现（这里的浏览器环境测不到）。
+
+   既然定位不到唯一来源、又确实还在用户那边出现，就不再逐个猜：
+   **把"箭头/展开器"这一类选择器统一钉死为 `transition:none`**。
+   用 `!important` 是为了兜住任何我没找到的来源（含将来新加的规则）。
+
+   为什么敢用 `!important`：这里的诉求就是"这个属性不许被别的规则改"，
+   正是它该用的场景。而且作用域很窄 —— 只覆盖下面列出的这些箭头选择器，
+   不是全站禁用动画（那样会把按下反馈、悬停浮起、弹窗入场一起干掉）。
+   ================================================================ */
+.og-exp .ico,
+.og-exp.open .ico,
+.og-sec > summary::before,
+.og-sec[open] > summary::before,
+.fb-node .tw,
+.tree .node .tw,
+[data-aexp],
+details > summary::before,
+details[open] > summary::before,
+summary::marker,
+summary::-webkit-details-marker{
+  transition:none !important;
+  animation:none !important;
+}
+/* 旋转本身**保留** —— 方向必须看得出展开 / 收起，只是不再"转过去" */
+.og-exp.open .ico{transform:rotate(90deg)}
+.og-sec[open] > summary::before{transform:rotate(90deg)}
+
+
+/* ---------------------------------------------------------------- 测试模式（MSH_TEST_MODE=1）
+   横幅**参与布局**（不是 position:fixed 覆盖），原因：
+   `.topbar` 在 `#app` 里面，任何固定覆盖在它上方的东西都会挡住导航标签的
+   点击热区 —— 实测 8 个标签全被挡住，整排点不动。
+   所以这里用"给 html 加 .test-mode → #app 整体下移 + 高度补偿"，
+   横幅自己在文档流最前面，谁都不压。
+   正常使用（没有 .test-mode）时这些规则完全不生效。 */
+html.test-mode #app{height:calc(100vh - 30px);margin-top:30px}
+.test-banner{
+  position:fixed;top:0;left:0;right:0;height:30px;z-index:100000;
+  display:flex;align-items:center;gap:10px;padding:0 14px;
+  background:#7A5B08;color:#FFE9A8;
+  font:12px/1.4 'Segoe UI',system-ui,sans-serif;
+  border-bottom:1px solid rgba(255,233,168,.35);
+  box-shadow:0 1px 8px rgba(0,0,0,.4);
+}
+.test-banner .btn{padding:2px 10px;min-height:22px;font-size:11.5px;
+  color:#FFE9A8;border-color:rgba(255,233,168,.4);background:transparent}
+.test-banner .btn:hover{background:rgba(255,233,168,.14)}
+/* 窄屏：横幅文案缩到一行，别把导航挤没 */
+@media (max-width:720px){
+  .test-banner span{display:none}
+  html.test-mode #app{height:calc(100vh - 30px);margin-top:30px}
+}

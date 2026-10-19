@@ -1,0 +1,91 @@
+# ---------------------------------------------------------------- 依赖与虚拟环境
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---------------------------------------------------------------- Python 产物
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---------------------------------------------------------------- 应用运行数据（★ 绝不能进仓库）
+# 默认数据目录（配置、密钥、索引、上传暂存、标签备份、日志）
+.music-sync-hub/
+# 如果有人在项目内指了 MSH_DATA_DIR，也可能出现这些
+config.toml
+secrets.toml
+mappings.json
+index.sqlite3
+index.sqlite3-shm
+index.sqlite3-wal
+*.db
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+uploads/
+tag-backups/
+logs/
+*.log
+*.err
+# 中转站/候选区/回收站的运行状态
+station/
+.station.json
+.music-sync-trash/
+# 上传过程中的半成品与标签临时文件
+*.mshpart
+*.mshtag
+
+# ---------------------------------------------------------------- 打包/备份产物
+*.zip
+MusicSyncHub-backup-*/
+MusicSyncHub-全量备份-*/
+*-审查包.zip
+*-测试包.zip
+msh-review/
+# 我在本地做的取证/截图目录
+ui-shots/
+ui-screenshots/
+msu2_analysis/
+organize_recovery/
+3lib/
+nometa/
+nometa2/
+
+# ---------------------------------------------------------------- 测试模式水印用的演示音频
+# 演示音频在打包时生成，不进主仓库（避免 30MB 二进制）
+demo/
+
+# ---------------------------------------------------------------- 编辑器与系统
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# ---------------------------------------------------------------- 本地排查痕迹
+*.tmp
+*.bak
+*.orig
+.ecdp2/
+tmp/
+scratch/

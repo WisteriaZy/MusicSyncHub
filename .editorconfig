@@ -1,0 +1,25 @@
+# 统一编辑器行为，避免无意义的 diff
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+[*.md]
+# Markdown 里行尾空格是换行语义，不能删
+trim_trailing_whitespace = false
+
+[*.{bat,cmd}]
+# Windows 批处理必须是 CRLF，否则 cmd 可能吃掉行尾
+end_of_line = crlf
+
+[Makefile]
+indent_style = tab

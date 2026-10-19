@@ -1,0 +1,33 @@
+# 统一换行符：检出时按平台，入库时一律 LF。
+# 例外：Windows 批处理必须是 CRLF，否则 cmd 可能吃掉行尾导致诡异错误。
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.command text eol=lf
+*.sh text eol=lf
+
+# 二进制
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.sqlite3 binary
+*.flac binary
+*.mp3 binary
+*.m4a binary
+*.wav binary
+*.ogg binary
+*.opus binary
+*.ape binary
+
+# 这些文件在 diff 里出现说明有问题（应该被 .gitignore 挡住）
+config.toml -diff
+secrets.toml -diff
+mappings.json -diff
+*.sqlite3 -diff

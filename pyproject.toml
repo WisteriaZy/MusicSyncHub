@@ -1,0 +1,18 @@
+[project]
+name = "music-sync-hub"
+version = "1.0.0"
+description = "Music Sync Hub - 跨服务器音乐库管理 / 双栏对比 / 查重查漏 / 安全同步"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "httpx>=0.27",
+  "mutagen>=1.47",
+  "Pillow>=10.0",
+  "paramiko>=3.4",
+  "smbprotocol>=1.13",
+  "python-multipart>=0.0.32",
+]
+
+[tool.uv]
+package = false

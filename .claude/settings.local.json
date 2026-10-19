@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(git add *)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "context7",
+    "filesystem",
+    "github"
+  ]
+}
