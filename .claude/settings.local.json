@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git init *)",
       "Bash(git config *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m 'feat: initial commit - Music Sync Hub v1.0.0 *)",
+      "Bash(git commit *)"
     ]
   },
   "enabledMcpjsonServers": [
