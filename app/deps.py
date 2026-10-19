@@ -525,28 +525,19 @@ def _reindex_after_transfer(src_id: str, dst_id: str,
     #   根目录没法用 subpath 扫（`subpath=""` 等于整库重扫），所以对根目录
     #   改用"按文件刷新"，只处理刚搬过去的那几个。
     dirs = {str(d).strip("/") for d in (dst_dirs or [])}
-    # ★ 根目录单独处理：要么有文件列表就精确刷新，要么整个根扫一遍
-    if "" in dirs:
-        if dst_files:
-            try:
-                refresh_tracks(dst_id, [p for p in dst_files if p])
-            except Exception as exc:
-                log.warning("根目录刷新索引失败: %s", exc)
-        else:
-            # 没有文件列表 → 扫描整个根目录（但不递归）
-            try:
-                S.scan_source(dst_id, manager.get(dst_id), db(), subpath="",
-                              max_files=500, max_depth=1)
-            except Exception as exc:
-                log.warning("根目录重扫失败: %s", exc)
-        dirs.discard("")  # 已处理，从待扫列表移除
-    # 处理子目录
     for d in sorted(x for x in dirs if x)[:50]:
         try:
             S.scan_source(dst_id, manager.get(dst_id), db(), subpath=d,
                           max_files=0)
         except Exception as exc:
             log.warning("搬运后重扫目标目录 %s 失败: %s", d, exc)
+    # 唯一调用方（routes/files.py::files_transfer）总会传 dst_files；
+    # 根目录只能按文件刷新（subpath="" 等于整库重扫）。
+    if "" in dirs and dst_files:
+        try:
+            refresh_tracks(dst_id, [p for p in dst_files if p])
+        except Exception as exc:                              # noqa: BLE001
+            log.warning("搬运到目标根目录后刷新索引失败: %s", exc)
 
 
 def refresh_tracks(sid: str, paths: List[str]) -> Dict[str, Any]:
@@ -688,7 +679,9 @@ def in_source_rel(src, raw: str, what: str = "路径") -> str:
     #   - 相对路径，没有 ..，通过 has_dotdot 检查
     #   - inside_root("Y:\music", "Y:\music\evil_link\...") → True（字符串前缀）
     #   - 但 inside_root_real 未调用，实际读取到系统文件
-    abs_path = src.abs_path(p)
-    if not P.inside_root_real(root_n, abs_path):
-        raise HTTPException(400, f"{what}经过目录联接指向了数据源之外")
+    #   只对本地源做：junction 只存在于本机文件系统；网络源的 root 可能是
+    #   URL 或空串，套 inside_root 会把所有相对路径误判为越界。
+    if getattr(src, "kind", "") == "local" and root_n:
+        if not P.inside_root_real(root_n, src.abs_path(p)):
+            raise HTTPException(400, f"{what}经过目录联接指向了数据源之外")
     return p.strip("/")
