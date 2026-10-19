@@ -217,16 +217,20 @@ MusicSyncHub/
 
 ## 截图
 
-### 双栏对比
-<img src="docs/screenshots/comparison.png" alt="库对比" width="800">
-
 ### 重复检测
 <img src="docs/screenshots/duplicates.png" alt="重复分组" width="800">
 
-### 音频播放器
-<img src="docs/screenshots/player.png" alt="内置播放器" width="800">
+*智能匹配识别跨库相同歌曲,按内容哈希和音质分组*
 
-> *注意：请添加截图到 `docs/screenshots/` 目录*
+### 曲库浏览
+<img src="docs/screenshots/library.png" alt="音乐库" width="800">
+
+*浏览已索引的音乐收藏,显示元数据、音质评分和内联播放器*
+
+### 文件操作
+<img src="docs/screenshots/files.png" alt="文件管理器" width="800">
+
+*预览后执行工作流的安全文件操作,带暂存区*
 
 ---
 

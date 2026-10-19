@@ -217,16 +217,20 @@ The matching algorithm uses a multi-factor evidence chain:
 
 ## Screenshots
 
-### Dual-Pane Comparison
-<img src="docs/screenshots/comparison.png" alt="Library Comparison" width="800">
-
 ### Duplicate Detection
 <img src="docs/screenshots/duplicates.png" alt="Duplicate Groups" width="800">
 
-### Audio Player
-<img src="docs/screenshots/player.png" alt="Built-in Player" width="800">
+*Smart matching identifies identical songs across libraries, grouping by content hash and quality*
 
-> *Note: Add screenshots to `docs/screenshots/` directory*
+### Library Browser
+<img src="docs/screenshots/library.png" alt="Music Library" width="800">
+
+*Browse your indexed music collection with metadata, quality scores, and inline player*
+
+### File Operations
+<img src="docs/screenshots/files.png" alt="File Manager" width="800">
+
+*Safe file operations with preview-before-execute workflow and staging area*
 
 ---
 
