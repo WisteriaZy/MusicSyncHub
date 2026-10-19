@@ -846,7 +846,8 @@ class Executor:
                 return out
             if src_stat.size and st2.size != src_stat.size:
                 # 不留在正式名下（会被当成正常文件入库），也不直接删
-                bad = f"{dst_path}.bad-{int(time.time())}"
+                import uuid as _uuid
+                bad = f"{dst_path}.bad-{_uuid.uuid4().hex[:8]}"
                 try:
                     dst.move(dst_path, bad)
                 except Exception:                             # noqa: BLE001
