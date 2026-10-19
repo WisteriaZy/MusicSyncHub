@@ -16,7 +16,9 @@ import threading
 import time
 from typing import Any, Dict
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
+
+from .core.guard import exclusive_slot
 
 router = APIRouter()
 
@@ -91,7 +93,8 @@ def list_mappings(sid: str = "") -> Dict[str, Any]:
 
 
 @router.put("/api/mappings")
-def put_mappings(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+def put_mappings(payload: Dict[str, Any] = Body(...),
+                 _job=Depends(exclusive_slot("mappings"))) -> Dict[str, Any]:
     """整体替换某个数据源的映射（界面是"编辑后保存"的模式）。"""
     sid = str(payload.get("source") or "").strip()
     if not sid:
@@ -117,7 +120,8 @@ def put_mappings(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
 
 
 @router.post("/api/mappings/one")
-def put_one(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+def put_one(payload: Dict[str, Any] = Body(...),
+            _job=Depends(exclusive_slot("mappings"))) -> Dict[str, Any]:
     """加/改一条规则（整理向导里"给这一组建映射"直接用这个）。"""
     sid = str(payload.get("source") or "").strip()
     key = str(payload.get("key") or "").strip()

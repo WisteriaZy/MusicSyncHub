@@ -298,7 +298,7 @@ def artist_conflict(m: "Match") -> bool:
     # 差异词之外，艺术家有没有一点办法对上？（拼写差异、缩写、带后缀）
     ra = P.normalize_text(P.primary_artist(m.left.get("artist") or ""))
     rb = P.normalize_text(P.primary_artist(m.right.get("artist") or ""))
-    if P.similarity(ra, rb) >= 0.72:
+    if P.similarity(ra, rb) >= ARTIST_VETO_MIN:
         return False
     return True
 

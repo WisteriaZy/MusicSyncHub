@@ -134,9 +134,11 @@ def _quarantine(src, path: str) -> str:
     为什么不删：删掉是不可逆的，而"半截文件"至少还能让用户判断
     （比如从别处再拷一份时对比大小）。也不留在正式名下 —— 否则
     它会被当成一首正常的歌入库。
+
+    ★ 用 uuid 替代时间戳避免同一秒内多文件校验失败时的名字冲突
     """
-    import time as _t
-    tgt = f"{path}.bad-{int(_t.time())}"
+    import uuid
+    tgt = f"{path}.bad-{uuid.uuid4().hex[:8]}"
     try:
         src.move(path, tgt)
         return tgt

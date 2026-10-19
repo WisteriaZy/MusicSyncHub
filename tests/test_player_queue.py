@@ -50,7 +50,8 @@ APP_JS = os.path.join(ROOT, "app", "web", "static", "js", "app.js")
 class QueueShapeContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.src = open(APP_JS, encoding="utf-8").read()
+        with open(APP_JS, encoding="utf-8") as f:
+            cls.src = f.read()
 
     def _queue_block(self) -> str:
         i = self.src.index("const queue = {")
@@ -160,7 +161,8 @@ class QueueBehaviourTest(unittest.TestCase):
     def setUpClass(cls):
         import shutil
         cls.node = shutil.which("node")
-        cls.src = open(APP_JS, encoding="utf-8").read()
+        with open(APP_JS, encoding="utf-8") as f:
+            cls.src = f.read()
 
     def _run(self, script: str) -> str:
         import subprocess

@@ -162,17 +162,16 @@ def release(token: Optional[str] = None) -> None:
     p = lock_path()
     if not p.exists():
         return
-    # ★ 没持锁就**什么都不做**。
-    #   原来这里写的是 `if tok and tok not in holder: return` —— tok 为 None 时
-    #   整个条件为假，于是继续往下 unlink，把**别人的锁删掉**。
-    #   触发场景很真实：进程重启后「恢复未完成任务」，`Jobs.finish()` 会调
-    #   `proclock.release()`；此时本进程并没有拿到锁，却把另一个正在运行的
-    #   实例的锁解除了 → 两个进程同时写文件。
-    if not tok:
+    # ★ 必须显式要求非空 token
+    #   - 空字符串会通过 `tok not in holder` 检查（空串存在于任何字符串）
+    #   - 恢复任务时 `st.lock_token = ""` 会误删别的进程的锁
+    if not tok or not tok.strip():
         return
     holder = _read_holder(p)
-    # 核对 token，避免把别人（比如接管后另一个进程）的锁删掉
-    if tok not in holder:
+    # ★ 精确匹配：token 必须完整出现且被 | 包围
+    #   - 避免子串误匹配（"123" 匹配 "12345|abc123def456|..."）
+    #   - holder 格式："{pid}|{token}|{timestamp}"
+    if f"|{tok}|" not in f"|{holder}|":
         return
     try:
         p.unlink()

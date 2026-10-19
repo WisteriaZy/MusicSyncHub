@@ -27,7 +27,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 log = logging.getLogger("msh.jobs")
 
-# 超过这么久没有心跳，就认为这个任务已经死了（进程被杀 / 断电）。
+# 超过这么久没有心跳,就认为这个任务已经死了（进程被杀 / 断电）。
 # 有了它，卡死的任务不会永久占着独占位。
 STALE_JOB_SECONDS = float(os.environ.get("MSH_STALE_JOB_SEC") or 180)
 # 这些 kind 会改动磁盘，必须独占；只读的（扫描只是建索引，但也动库）
@@ -46,7 +46,10 @@ EXCLUSIVE_KINDS = {"sync", "move", "organize", "collect", "upload", "trash",
                    #     （表现：搜索得到、点进去播放失败）。
                    #   · `upload-commit` 会把暂存区的文件**搬进库里**并改索引，
                    #     同样不能在别的写流程中途插进来。
-                   "scan", "upload-commit"}
+                   "scan", "upload-commit",
+                   # ★ mappings 写映射规则文件，虽然操作极快（<50ms），
+                   #   但为了保持一致性（所有写操作都占独占位），也纳入独占。
+                   "mappings"}
 
 
 @dataclass
