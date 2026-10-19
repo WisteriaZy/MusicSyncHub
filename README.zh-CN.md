@@ -81,7 +81,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
 
 # 克隆仓库
-git clone https://github.com/yourusername/MusicSyncHub.git
+git clone https://github.com/WisteriaZy/MusicSyncHub.git
 cd MusicSyncHub
 
 # 安装依赖
@@ -308,7 +308,7 @@ python tools/smoke_api.py
 
 ```bash
 # 克隆并安装
-git clone https://github.com/yourusername/MusicSyncHub.git
+git clone https://github.com/WisteriaZy/MusicSyncHub.git
 cd MusicSyncHub
 uv sync
 
@@ -379,7 +379,7 @@ python tools/audit_split.py  # 检查导入/路由问题
 
 ## 联系与支持
 
-- **问题反馈：** [GitHub Issues](https://github.com/yourusername/MusicSyncHub/issues)
+- **问题反馈：** [GitHub Issues](https://github.com/WisteriaZy/MusicSyncHub/issues)
 - **文档：** [docs/](docs/)
 - **安全问题：** 见 [SAFETY.md](SAFETY.md) 了解安全相关事宜
 

@@ -81,7 +81,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
 
 # Clone the repository
-git clone https://github.com/yourusername/MusicSyncHub.git
+git clone https://github.com/WisteriaZy/MusicSyncHub.git
 cd MusicSyncHub
 
 # Install dependencies
@@ -308,7 +308,7 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
 
 ```bash
 # Clone and install
-git clone https://github.com/yourusername/MusicSyncHub.git
+git clone https://github.com/WisteriaZy/MusicSyncHub.git
 cd MusicSyncHub
 uv sync
 
@@ -379,7 +379,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ## Contact & Support
 
-- **Issues:** [GitHub Issues](https://github.com/yourusername/MusicSyncHub/issues)
+- **Issues:** [GitHub Issues](https://github.com/WisteriaZy/MusicSyncHub/issues)
 - **Documentation:** [docs/](docs/)
 - **Security:** See [SAFETY.md](SAFETY.md) for security-related concerns
 
