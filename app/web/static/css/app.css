@@ -1088,7 +1088,7 @@ td,th{font-size:var(--fs)}
 /* 控件高度对齐到 32 / 28 两档（1903 的规格），
    并要求 flex 容器里的控件视觉居中，避免"有的高有的矮" */
 .btn,.chip,select,input[type=text],input[type=search],input[type=number],
-input[type=password],.field input,.field select{min-height:var(--ctl-h)}
+input[type=password],.field input:not([type=checkbox]):not([type=radio]):not([type=range]),.field select{min-height:var(--ctl-h)}
 
 /* ---------------------------------------------------------------- 窄屏不撑破容器
    ★ 这一条是"小屏幕上显示不全"的**根因**。
@@ -1106,7 +1106,8 @@ input[type=password],.field input,.field select{min-height:var(--ctl-h)}
      1. 控件宽度跟着容器走（100%）；
      2. 允许 flex/grid 子项收缩到内容宽度以下（min-width:0）。
    两者缺一，都会在小屏上重新撑破。 */
-.field input,.field select,.field textarea{width:100%;min-width:0;box-sizing:border-box}
+.field input:not([type=checkbox]):not([type=radio]):not([type=range]),
+.field select,.field textarea{width:100%;min-width:0;box-sizing:border-box}
 .grid > *,.row > *,.grid.c2 > *,.grid.c3 > *{min-width:0}
 .card,.card > *{min-width:0}
 
@@ -1131,7 +1132,11 @@ textarea,select{max-width:100%}
    统一允许任意处断行。这些选择器都不涉及表格（表格在可横向滚动的容器里）。 */
 .card,.field,.hint,.muted,.nav-fallback,.busy-bar{overflow-wrap:anywhere}
 .btn.sm,.chip,.btn.icon.sm{min-height:var(--ctl-h-sm)}
-.field input,.field select{min-height:var(--ctl-h)}
+/* ★ 复选框/单选/滑块必须排除：`.field` 里的勾选项(智能整理的忽略范围、收纳区)
+   被 `width:100%` 拉满整行，同行的目录名(`.ell`)被挤成 0 宽 —— 界面上一整行
+   只有一个巨大的方块、名字全看不见；`min-height` 还会把 16px 方框撑成 32px。 */
+.field input:not([type=checkbox]):not([type=radio]):not([type=range]),
+.field select{min-height:var(--ctl-h)}
 select,input[type=text],input[type=search],input[type=number]{padding:5px 9px}
 .toolbar{align-items:center;row-gap:8px}
 .toolbar>*{flex-shrink:0}

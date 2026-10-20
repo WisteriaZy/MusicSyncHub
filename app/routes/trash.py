@@ -19,15 +19,19 @@
 """
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from ..core.guard import exclusive_slot
-from ..deps import (as_dicts, as_text, manager, refresh_tracks,
+from ..deps import (as_dicts, as_text, db, manager, refresh_tracks,
                     require_writable, resolve_source)
 
 router = APIRouter()
+
+log = logging.getLogger("msh.trash")
 
 
 def _local(sid: str):
@@ -92,14 +96,35 @@ def trash_restore(payload: Dict[str, Any] = Body(...),
         except Exception as exc:                      # noqa: BLE001
             results.append({"rel": rel, "state": "error",
                             "detail": f"{type(exc).__name__}: {exc}"})
-    # 还原出来的文件要回到索引里，否则列表里看不到
-    paths = [src.abs_path(r["target"]) for r in results
-             if r.get("state") == "done" and r.get("target")]
-    if paths:
+    # 还原出来的东西要回到索引里,否则曲库和目录树里看不到。
+    # ★ 文件用 `refresh_tracks`(按路径重扫),**目录要用局部重扫**:
+    #   `refresh_tracks` 是"按文件"的,把一个目录路径丢进去什么都不会索引 ——
+    #   于是文件夹确实回到了磁盘,界面上却查不到(用户以为还原失败,
+    #   或者过一会儿重扫后它才突然出现,顺序和别的目录对不上)。
+    _files: List[str] = []
+    _dirs: List[str] = []
+    for r in results:
+        if r.get("state") != "done" or not r.get("target"):
+            continue
+        ap = src.abs_path(r["target"])
         try:
-            refresh_tracks(sid, paths)
+            (_dirs if os.path.isdir(ap) else _files).append(r["target"])
+        except OSError:
+            _files.append(r["target"])
+    if _files:
+        try:
+            refresh_tracks(sid, [src.abs_path(p) for p in _files])
         except Exception:                             # noqa: BLE001
             pass
+    if _dirs:
+        try:
+            from ..core import scanner as S
+            src_obj = manager.get(sid)
+            for p in _dirs:
+                S.scan_source(sid, src_obj, db(), subpath=src.rel_path(src.abs_path(p)),
+                              max_files=0)
+        except Exception as exc:                      # noqa: BLE001
+            log.warning("还原目录后重扫失败 %s: %s", _dirs, exc)
     return {"ok": True, "done": done, "total": len(items), "results": results}
 
 

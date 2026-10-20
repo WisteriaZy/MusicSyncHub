@@ -117,7 +117,7 @@ const Organizer = (() => {
         </div>
 
         <details class="og-sec" id="aw-adv">
-          <summary>高级设置（可选）</summary>
+          <summary><span class="oga" aria-hidden="true">▸</span>高级设置(可选)</summary>
           <div class="field" style="margin-top:8px">
             <label>映射规则</label>
             <div class="row" style="margin:6px 0;align-items:center">
@@ -180,6 +180,57 @@ const Organizer = (() => {
     const structHint = ctl.body.querySelector('#aw-struct-hint');
     const minHint = ctl.body.querySelector('#aw-min-hint');
     const progBox = ctl.body.querySelector('#aw-progress');
+
+    // ★ 高级设置的展开箭头要自己补:原生三角被 CSS 藏掉了(`.og-sec>summary`
+    //   的 list-style/::marker 全清空),而"给 details 塞文本箭头"那段只处理了
+    //   方案区(`planBox`),向导自己的这一块就成了**一行纯文字** ——
+    //   用户根本看不出它能展开。
+    const advBox = ctl.body.querySelector('#aw-adv');
+    if (advBox) {
+      const advArrow = advBox.querySelector('.oga');
+      advBox.addEventListener('toggle', () => {
+        if (advArrow) advArrow.textContent = advBox.open ? '▾' : '▸';
+      });
+    }
+
+    /* 生成方案的**内嵌**进度:进度条 + 文案 + 取消,就写在「重新计算」那一行。
+       为什么不用 `UI.watchJobDialog`:那是个模态框,生成一次就要关一次,
+       调参数反复重算时非常烦人,而且它会盖住方案区,看不到上一次的结果。
+       返回方案本身;取消返回 `{cancelled:true}`;失败抛出。 */
+    function progressReset() {
+      progBox.innerHTML = '';
+    }
+
+    async function watchInline(jobId) {
+      progBox.innerHTML =
+        '<span class="pbar" style="display:inline-block;width:150px;vertical-align:middle">'
+        + '<i id="aw-pbar"></i></span>'
+        + '<span class="muted" id="aw-pmsg" style="font-size:11.5px">正在开始...</span>'
+        + '<button class="btn sm ghost" id="aw-pstop">取消</button>';
+      const bar = progBox.querySelector('#aw-pbar');
+      const msg = progBox.querySelector('#aw-pmsg');
+      const stop = progBox.querySelector('#aw-pstop');
+      stop.onclick = async () => {
+        stop.disabled = true;
+        msg.textContent = '正在取消...(已经算完的部分不会回退)';
+        try { await API.cancelJob(jobId); } catch (e) { /* 取消失败就算了 */ }
+      };
+      const res = await UI.watchJob(jobId, {
+        onProgress: (j) => {
+          if (j.percent != null) {
+            bar.style.width = Math.max(0, Math.min(100, Number(j.percent))) + '%';
+          }
+          const n = j.total
+            ? `（${j.done}/${j.total}${j.eta ? ` 约剩 ${j.eta}s` : ''}）` : '';
+          msg.textContent = (j.message || '处理中...') + n;
+        },
+      });
+      const j = (res && res._job) || {};
+      if (j.state === 'cancelled' || j.cancel) return { cancelled: true };
+      if (j.state === 'error') throw new Error(j.error || '生成方案失败');
+      if (res && typeof res === 'object' && '_job' in res) delete res._job;
+      return res;
+    }
 
     /** 把当前选择写回记忆（忽略范围与收纳区是长期偏好，最值得记）。 */
     const remember = () => savePref(sid, {
@@ -418,13 +469,12 @@ const Organizer = (() => {
       yesBtn.disabled = true; dryBtn.disabled = true;
       try {
         const started = await API.organizeAlbumPlan(body());
-        // ★ 后端默认**后台跑**（真实库按专辑分组实测要 6 秒，同步等会让界面
-        //   只有一个转圈、不知道进度也取消不了）。所以这里要接住两种返回：
-        //   后台 → {job, async:true} 走带进度/可取消的对话框；
-        //   同步 → 直接就是方案（老后端 / wait:true 的调用）。
-        plan = started && started.async
-          ? await UI.watchJobDialog(started.job, { title: '正在生成整理方案' })
-          : started;
+        // ★ 后端默认**后台跑**(真实库按专辑分组实测要 6 秒,同步等会让界面
+        //   只有一个转圈、不知道进度也取消不了)。所以这里要接住两种返回:
+        //   后台 → {job, async:true} 走**内嵌**进度(见 `watchInline`);
+        //   同步 → 直接就是方案(老后端 / wait:true 的调用)。
+        plan = started && started.async ? await watchInline(started.job) : started;
+        progressReset();
         if (!plan || plan.cancelled) {
           planBox.innerHTML = '<div class="pad muted">已取消</div>';
           yesBtn.disabled = false; dryBtn.disabled = false;
@@ -433,11 +483,11 @@ const Organizer = (() => {
         only = null;
         paintPlan();
       } catch (e) {
+        progressReset();
         planBox.innerHTML = `<div class="pad" style="color:var(--danger)">${U.esc(e.message)}</div>`;
         yesBtn.disabled = false; dryBtn.disabled = false;
       }
     }
-
     /** 一组对应的**全部**分组键（同一目标目录可能由多个键合并而来）。 */
     const keysOf = (a) => (a.keys && a.keys.length ? a.keys : [a.key]);
 
