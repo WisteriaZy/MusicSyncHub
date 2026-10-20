@@ -156,7 +156,8 @@ def transfer_one(src, dst, src_path: str, dst_path: str, *,
                  verify_hash: bool = False,
                  hard_delete: bool = False,
                  job=None,
-                 mode: str = "") -> Dict[str, Any]:
+                 mode: str = "",
+                 abandoned=None) -> Dict[str, Any]:
     """把 `src` 上的 `src_path` 搬到 `dst` 上的 `dst_path`。
 
     返回 `{state, detail, ...}`；`state` 取值与 `Executor` 保持一致：
@@ -323,6 +324,14 @@ def transfer_one(src, dst, src_path: str, dst_path: str, *,
             log.warning("搬运心跳续期失败（可能导致独占位被误回收）: %s", exc)
 
     # ---- 3) 删源（进回收站；只有显式 hard_delete 才真删）----
+    # ★ 调用方已经放弃等待（单步超时）→ **不删源**。
+    #   原来超时只让调用方不再等，这个线程照样跑完、把源移进回收站：
+    #   界面报"超时，可重试"，磁盘上其实已经搬完了；索引也没跟上。
+    #   现在：目标已完整写好，源留着 —— 两边都有，比"界面说失败、源却没了"安全。
+    if abandoned is not None and abandoned.is_set():
+        log.warning("搬运超时后才完成复制，已保留源文件（两边都有）：%s", src_path)
+        return {**out, "state": "error", "error_kind": "timeout",
+                "detail": "复制在超时之后才完成，源文件已保留（两边都有）"}
     try:
         trashed = src.remove(src_path, hard=hard_delete)
         out["trashed"] = trashed

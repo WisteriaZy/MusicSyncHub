@@ -4,6 +4,44 @@
 
 ## [未发布]
 
+### 修复：已知问题批量修复（2026-10-20）
+
+**K2 — 崩溃恢复链三处断点全部修复**
+- 步骤独立存入 `job.steps` 列（`ALTER TABLE job ADD COLUMN steps TEXT`），不再和任务结果摘要共用 `detail` 字段 → 暂停后被杀的任务步骤不再丢失
+- 步骤不截断 → 1500+ 步大任务重启后也能续做
+- `load_unfinished` 恢复的任务标 `interrupted=True`，`unfinished()` 认这个标记 → 启动提示不再永远不出现
+- `settle_interrupted()` 把已处理的中断记录落库（`state=error`）→ 下次重启不再重复提示
+
+**K1 — transfer 超时后孤儿线程仍会删源**
+- `_apply_guarded` 超时时设 `abandoned` 标志（`threading.Event`）并传给 `transfer_one`
+- `transfer_one` 在第三步（删源）前检查 `abandoned`，超时后复制已完成的情况下保留源文件并如实报"两边都有"
+- 修复前：界面说"超时，可重试"，磁盘上源已进回收站，索引也没同步
+
+**K9 — `make_plan` 生成方案时不检查独占任务**
+- `make_plan` 接口加 `get_jobs().ensure_free()` → 有任务在运行时生成方案返回 409，而不是拿过期快照
+
+**K11 — 查重任务取消后被覆盖成"已完成"**
+- `upload_dedup_worker` 取消时不再直接写 `job.state`，交由 `finish()` 按 `job.cancel` 标志处理
+
+**K16 — max_steps 由客户端无限制控制**
+- `execute_plan` 和 `files_move` 的上限改为 `min(客户端值, 20000)` 服务端硬顶
+
+**K17 — CORS 全开**
+- `allow_origins=["*"]` 改为按 `MSH_CORS_ORIGINS` 环境变量白名单，默认关闭跨域
+- 补 `_reject_cross_site_writes` 中间件：拦截带外来 `Origin` 的非 GET/HEAD/OPTIONS 请求（含 `Origin: null`）→ 防 CSRF 简单请求
+
+**A3 — 查重组代表项依赖行序**
+- 代表项改为按 `(-名字长度, name_key, path)` 排序取第一个，同一份数据任意行序结果一致
+
+**A4 — 跨库合并后互相否决的文件仍在同一组**
+- `merge_matched_pairs` 合并后追加 `_split_inadmissible()` 复核：组内两两 `fuzzy_admissible` 不通过就拆开另起子组
+- 测试复现：`Pink Floyd` / `Pink Floyd Live Band` / `Live Band` 三份，原来全并成一组、其中一首被建议删掉；修复后拆成两组
+
+**A7 — base_key 用 rsplit 切多段版本标记会切错**
+- `group_to_dict` 的 `base_key` 改用 `split("|", 3)[:3]` 从左切，`instrumental|remix` 这类多标记版本不再被拆散
+
+测试 900 → 914。详见 `docs/SECURITY_REVIEW_2026-10-19.md`。
+
 ### 修复：Windows 命名规则 + 只改大小写的改名（2026-10-19）
 
 - **保留名 / 非法名**：能新建、改名出 `CON` / `NUL` / `COM1` / `Album.` 这类目录或文件。

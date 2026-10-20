@@ -661,7 +661,8 @@ def files_move(payload: Dict[str, Any] = Body(...), exclusive: None = Depends(ex
     steps = as_dicts(payload, "steps", "移动步骤")
     if not isinstance(steps, list) or not steps:
         raise HTTPException(400, "没有要执行的步骤")
-    if len(steps) > int(payload.get("max_steps") or 20000):
+    # 上限由服务端定；客户端只能往小了调（原来 max_steps 完全由客户端给）
+    if len(steps) > min(int(payload.get("max_steps") or 20000), 20000):
         raise HTTPException(400, "步骤过多，请分批执行")
     execute = bool(payload.get("execute", False))
     if execute and not payload.get("confirm"):

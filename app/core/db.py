@@ -282,6 +282,11 @@ class Database:
         for col, decl in wanted.items():
             if col not in cols:
                 conn.execute(f"ALTER TABLE track ADD COLUMN {col} {decl}")
+        # ★ 可恢复步骤单独一列。原来塞在 `detail` 里，而 `finish()` 收尾时
+        #   会用结果摘要覆盖 `detail` —— 暂停后被杀的任务步骤就没了。
+        jcols = {r["name"] for r in conn.execute("PRAGMA table_info(job)")}
+        if "steps" not in jcols:
+            conn.execute("ALTER TABLE job ADD COLUMN steps TEXT")
         conn.commit()
 
     # ------------------------------------------------------------ 通用

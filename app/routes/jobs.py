@@ -189,6 +189,7 @@ def recover_job(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     finally:
         if job.state == "running":
             get_jobs().finish(job)
-    # 恢复完成后把旧的"中断"记录标成已处理，免得反复提示
-    st.acked = True
+    # 恢复完成后把旧的"中断"记录标成已处理，免得反复提示。
+    # ★ 必须落库：库里那行还是 running，只改内存的话下次启动又会弹一遍。
+    get_jobs().settle_interrupted(st, "已接着做完（见新任务）")
     return {"ok": True, "job": job.to_dict(), "result": r}

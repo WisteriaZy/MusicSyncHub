@@ -931,7 +931,8 @@ def _dedup_files(d: Path, batch: str, sid: str, files: List[Dict[str, Any]],
     results: Dict[str, Any] = {}
     for f in files:
         if job.cancel:
-            job.state = "cancelled"
+            # 状态交给 finish() 定（它看 job.cancel → cancelled）。
+            # 原来这里直接写 state，随后 finish() 又按"没出错"把它改回 done。
             job.message = "已取消"
             break
         job.current = f.get("name") or f.get("rel") or ""
@@ -949,7 +950,7 @@ def _dedup_files(d: Path, batch: str, sid: str, files: List[Dict[str, Any]],
         #   超过 STALE_JOB_SECONDS(180s)；不打心跳就会被判成"已中断"、
         #   **释放独占位**，于是另一个写流程能插进来。
         job.touch()
-    if job.state == "running":
+    if not job.cancel:
         job.message = (f"发现 {len(results)} 个疑似重复"
                        if results else "未发现重复")
     return {"dups": results, "checked": job.done}

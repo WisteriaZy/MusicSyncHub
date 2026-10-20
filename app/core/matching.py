@@ -805,7 +805,14 @@ def group_duplicates(rows: Sequence[Dict[str, Any]], tolerance: float = 2.0,
     # 2000 首的库里唯一键接近曲目数，全部两两打分要几十秒到几分钟（实测 179s）。
     # 但"能不能合并"其实由几个**字符串相等**条件决定（见下面的合并门禁），
     # 所以先把这些廉价判断做完，只有真正通过门禁的候选才值得调用 score_pair。
-    reps = {k: max(v, key=lambda x: len(str(x.get("name") or ""))) for k, v in groups.items()}
+    # ★ 代表项必须确定：原来只按名字长度取 max，同长看行序 —— 合并门禁比的是
+    #   代表项的 name_key，于是同一个库换个行序查重结果就变（实测 48 组变 5 组）。
+    #   `max` 取最大，所以兜底键用"名字/路径越小越优先"的反向排序不方便；
+    #   直接排序取第一个：长名字优先，同长按 name_key、再按 path 字典序。
+    reps = {k: sorted(v, key=lambda x: (-len(str(x.get("name") or "")),
+                                        str(x.get("name_key") or ""),
+                                        str(x.get("path") or "")))[0]
+            for k, v in groups.items()}
 
     def _version_of(k: str, r: Dict[str, Any]) -> str:
         """这个组的版本标记。
@@ -938,6 +945,7 @@ def group_duplicates(rows: Sequence[Dict[str, Any]], tolerance: float = 2.0,
 
 
 def merge_matched_pairs(pairs: Sequence[Tuple[Dict[str, Any], Dict[str, Any]]],
+                        tolerance: float = 2.0,
                         ) -> List[List[Dict[str, Any]]]:
     """把"两两配对"的结果合并成**互不重叠**的组。
 
@@ -1001,7 +1009,38 @@ def merge_matched_pairs(pairs: Sequence[Tuple[Dict[str, Any], Dict[str, Any]]],
     for k, r in by_key.items():
         buckets.setdefault(find(k), []).append(r)
     # 组的顺序也定住（按根键排序），否则同一份数据两次跑出来的组序不同
-    return [buckets[k] for k in sorted(buckets)]
+    out: List[List[Dict[str, Any]]] = []
+    for k in sorted(buckets):
+        out.extend(_split_inadmissible(buckets[k], tolerance))
+    return out
+
+
+def _split_inadmissible(group: List[Dict[str, Any]],
+                        tolerance: float) -> List[List[Dict[str, Any]]]:
+    """★ 组内两两复核：并查集只管"连通"，不管"彼此都认"。
+
+    A~B、B~C 都通过了配对门禁，A~C 却会被 `artist_conflict` 否决
+    （实测 `Pink Floyd` / `Pink Floyd Live Band` / `Live Band`）——
+    并查集照样把三份并成一组，界面提示"保留一份、清理其它"，
+    于是两首**不同的歌**里有一首会被建议删掉。
+
+    做法：按稳定顺序逐个放进第一个"和组内每一位都认"的子组，
+    都不认就另起一组；最后丢掉只剩 1 条的子组（单份不算重复）。
+    子组之间互不重叠，不会重新引入"同一文件属于两组"的老问题。
+    """
+    if len(group) <= 2:
+        return [group] if len(group) == 2 else []
+    members = sorted(group, key=lambda r: (str(r.get("source_id") or ""),
+                                           str(r.get("path") or "")))
+    subs: List[List[Dict[str, Any]]] = []
+    for r in members:
+        for sg in subs:
+            if all(fuzzy_admissible(score_pair(r, o, tolerance)) for o in sg):
+                sg.append(r)
+                break
+        else:
+            subs.append([r])
+    return [sg for sg in subs if len(sg) >= 2]
 
 
 def pick_representative(group: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1045,10 +1084,13 @@ def group_to_dict(group: Sequence[Dict[str, Any]], keep_path: Optional[str] = No
     keep = keep_path or rep.get("path")
     wasted = sum((r.get("size") or 0) for r in ordered if r.get("path") != keep)
     dk = rep.get("dup_key") or P.name_key(rep.get("name") or "")
-    # 版本无关的组键（去掉最后的版本段），供界面"不区分版本"视图把
+    # 版本无关的组键（去掉版本段），供界面"不区分版本"视图把
     # 原曲/伴奏/重制版重新并成一个总体视图使用。
-    parts = dk.rsplit("|", 1)
-    base_key = parts[0] if len(parts) == 2 else dk
+    # ★ 必须从**左边**切三段（和 `_version_of` 同一规则）：版本段自己可能含 `|`
+    #   （`instrumental|remix`），原来 rsplit 只剥最后一段，"伴奏+Remix"那份
+    #   的 base_key 变成 `晴天|周杰伦|196|instrumental`，和原曲分到两个总体视图。
+    parts = dk.split("|", 3)
+    base_key = "|".join(parts[:3]) if len(parts) == 4 else dk
     return {
         "key": dk,
         "base_key": base_key,

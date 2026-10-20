@@ -188,6 +188,9 @@ def make_plan(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     left_id, right_id = payload.get("left"), payload.get("right")
     if not left_id or not right_id or left_id == right_id:
         raise HTTPException(400, "需要两个不同的数据源 id")
+    # ★ 生成方案要一致快照：别的流程正在移动/删除文件时算出来的方案是错的，
+    #   用户照着它执行等于照着过期状态动手。忙就 409（全局处理器转）。
+    get_jobs().ensure_free()
     cfg = load_config()
     ltracks, lcut, ltotal = _tracks_capped(left_id, payload.get("left_prefix", ""))
     rtracks, rcut, rtotal = _tracks_capped(right_id, payload.get("right_prefix", ""))
@@ -261,7 +264,8 @@ def execute_plan(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     steps = as_dicts(payload, "steps", "计划步骤")
     if not steps:
         raise HTTPException(400, "没有要执行的步骤")
-    if len(steps) > int(payload.get("max_steps") or 20000):
+    # 上限由服务端定；客户端只能往小了调（原来 max_steps 完全由客户端给）
+    if len(steps) > min(int(payload.get("max_steps") or 20000), 20000):
         raise HTTPException(400, "步骤过多，请分批执行")
     execute = bool(payload.get("execute", False))
     if execute and not payload.get("confirm"):
@@ -417,7 +421,8 @@ def _duplicates_core(payload: Dict[str, Any], job=None) -> Dict[str, Any]:
         #   而且在一个组里选了保留的文件可能在另一个组里被删掉。
         #   合并后 3 份 = 一组 3 条成员，和单库查重的组形状一致，
         #   下游的 clusters / suggested_keep / 保留策略全都能直接复用。
-        groups.extend(M.merge_matched_pairs(pairs))
+        groups.extend(M.merge_matched_pairs(
+            pairs, tolerance=cfg.settings.duration_tolerance_sec))
     else:
         for sid, rows in pools.items():
             found = M.group_duplicates(rows, tolerance=cfg.settings.duration_tolerance_sec,

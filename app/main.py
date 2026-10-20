@@ -378,9 +378,38 @@ async def _unhandled(request, exc: Exception):
                            f"详情已写进日志，可在「设置 → 后台日志」查看。"})
 
 
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
-)
+# ★ CORS 不再全开。
+#   原来 `allow_origins=["*"]`，而 `/api/execute` 接受客户端自带的步骤 ——
+#   本机浏览器里打开的**任何网页**都能跨域调接口改文件。前端走的是同源相对路径，
+#   根本不需要 CORS；确实要从别的页面调，用 MSH_CORS_ORIGINS 显式列出（逗号分隔）。
+_cors = [o.strip() for o in os.environ.get("MSH_CORS_ORIGINS", "").split(",") if o.strip()]
+if _cors:
+    app.add_middleware(
+        CORSMiddleware, allow_origins=_cors, allow_methods=["*"], allow_headers=["*"],
+    )
+
+
+@app.middleware("http")
+async def _reject_cross_site_writes(request, call_next):
+    """挡住跨站的写请求（CSRF）。
+
+    只收紧 CORS 还不够：`text/plain` 的"简单请求"不触发预检，浏览器会照发、
+    只是不让页面读响应 —— 写操作已经生效了。所以对**改东西的方法**再核一次
+    `Origin`：带了 Origin 且不是本服务自己（也不在白名单里）→ 403。
+    不带 Origin 的（curl、脚本、同源的部分请求）放行。
+    """
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        if origin and origin != "null":
+            from urllib.parse import urlsplit
+            host = request.headers.get("host", "")
+            if urlsplit(origin).netloc != host and origin not in _cors:
+                return JSONResponse(status_code=403,
+                                    content={"detail": "拒绝跨站请求（Origin 不匹配）"})
+        elif origin == "null":
+            return JSONResponse(status_code=403,
+                                content={"detail": "拒绝跨站请求（Origin: null）"})
+    return await call_next(request)
 # 文件夹级操作（新建/改名/移动/删除）单独放在 sources/folders_api.py，
 # 路由在这里挂载，避免 main.py 继续膨胀。
 app.include_router(folders_router)

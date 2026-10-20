@@ -587,10 +587,13 @@ class Executor:
         if STEP_TIMEOUT_SEC <= 0:
             return self._apply(st, **opts)
         box: Dict[str, Any] = {}
+        # ★ "已放弃"标志：超时后工作线程还在跑，transfer 在删源前看它一眼，
+        #   放弃了就保留源文件（见 `transfer.transfer_one` 第 3 步）。
+        abandoned = threading.Event()
 
         def run() -> None:
             try:
-                box["r"] = self._apply(st, **opts)
+                box["r"] = self._apply(st, _abandoned=abandoned, **opts)
             except Exception as exc:            # noqa: BLE001 —— 原样带回主线程
                 box["e"] = exc
 
@@ -598,6 +601,7 @@ class Executor:
         t.start()
         t.join(STEP_TIMEOUT_SEC)
         if t.is_alive():
+            abandoned.set()
             job.touch()
             return {"step": st.get("id"), "op": st.get("op"), "state": "error",
                     "src": st.get("src_path"), "dst": st.get("dst_path"),
@@ -674,7 +678,8 @@ class Executor:
         return out
 
     def _apply(self, st: Dict[str, Any], policy: str, verify: bool,
-               verify_hash: bool, hard_delete: bool) -> Dict[str, Any]:
+               verify_hash: bool, hard_delete: bool,
+               _abandoned: Optional[threading.Event] = None) -> Dict[str, Any]:
         op = st.get("op")
         t0 = time.time()
         res: Dict[str, Any] = {"step": st.get("id"), "op": op, "state": "done",
@@ -687,7 +692,8 @@ class Executor:
             # 就该对 transfer 步骤也生效，不能只对 copy 生效）
             res.update(self._do_transfer(st, policy=policy, verify=verify,
                                         verify_hash=verify_hash,
-                                        hard_delete=hard_delete))
+                                        hard_delete=hard_delete,
+                                        abandoned=_abandoned))
         elif op in ("trash", "delete"):
             res.update(self._do_remove(st, hard=hard_delete or op == "delete"))
         elif op == "rename":
@@ -712,7 +718,8 @@ class Executor:
     def _do_transfer(self, st: Dict[str, Any], policy: str = "skip",
                      verify: Optional[bool] = None,
                      verify_hash: bool = False,
-                     hard_delete: bool = False) -> Dict[str, Any]:
+                     hard_delete: bool = False,
+                     abandoned: Optional[threading.Event] = None) -> Dict[str, Any]:
         """跨库**安全搬运**：复制 → 校验 → 再删源。
 
         复用 `core.transfer.transfer_one` —— 那里面已经把所有失败路径
@@ -763,7 +770,8 @@ class Executor:
                 #   就会被 `_reap_stale_locked` 判成"心跳中断"，
                 #   任务被标成 error、独占位被释放，而它其实还在跑。
                 #   那之后任何写操作都会被放进来，两边同时改文件。
-                job=self._job)
+                job=self._job,
+                abandoned=abandoned)
         except Exception as exc:                                  # noqa: BLE001
             return {"state": "error",
                     "detail": f"{type(exc).__name__}: {exc}"}

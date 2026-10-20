@@ -88,6 +88,8 @@ class JobState:
     acked: bool = False
     # 崩溃恢复用的原始步骤（只在需要时可重放的操作上填）
     steps: List[Dict[str, Any]] = field(default_factory=list)
+    # 上次进程异常退出时留下的（启动时从库里捞回来的）
+    interrupted: bool = False
 
     def touch(self) -> None:
         self.heartbeat = time.time()
@@ -135,6 +137,27 @@ class JobState:
                            ("error", "paused", "cancelled"),
             "step_count": len(self.steps),
         }
+
+
+def _load_steps(row) -> List[Dict[str, Any]]:
+    """从任务行里读回可重放步骤。新库读 `steps` 列；老库兼容 `detail` 里的 JSON。"""
+    import json as _json
+    for col in ("steps", "detail"):
+        try:
+            raw = row[col] or ""
+        except (IndexError, KeyError):
+            continue
+        if not raw or raw[0] not in "[{":
+            continue
+        try:
+            obj = _json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("steps"), list):
+            return obj["steps"]
+        if isinstance(obj, list):
+            return obj
+    return []
 
 
 class JobBusy(RuntimeError):
@@ -333,6 +356,21 @@ class Jobs:
         st.acked = True
         return True
 
+    def settle_interrupted(self, st: JobState, message: str) -> None:
+        """把一条"上次异常退出"的任务标成已处理，并**写回库**。
+
+        只改内存（`acked=True`）不够：库里那行 state 仍是 running/paused，
+        下次启动 `load_unfinished` 又会把它读出来再提示一遍。
+        """
+        st.acked = True
+        st.interrupted = False
+        st.message = message
+        if self.db is not None:
+            try:
+                self.db.update_job(st.id, state="error", message=message)
+            except Exception as exc:                      # noqa: BLE001
+                log.warning("中断任务落库失败 %s: %s", st.id, exc)
+
     def skip(self, st: JobState, item: Dict[str, Any]) -> None:
         """记下一个被跳过的条目（超时 / 单点出错但整批继续）。"""
         with self._lock:
@@ -441,15 +479,20 @@ class Jobs:
     def unfinished(self) -> List[Dict[str, Any]]:
         """上次运行**没跑完**的任务（程序异常退出留下的）。
 
-        判据：状态是 running/paused，但心跳早就停了 —— 说明进程没了，
-        不是真的还在跑。
+        两种来源：
+          · 启动时 `load_unfinished` 从库里捞回来的（`interrupted=True`）
+          · 本进程内状态还是 running/paused、但心跳早停了的（进程内卡死）
+        用户点过"忽略"/"接着做完"的（`acked`）不再提示。
         """
         now = time.time()
         out = []
         with self._lock:
             for st in self._jobs.values():
-                if st.state in ("running", "paused") and \
-                        (now - st.heartbeat) > STALE_JOB_SECONDS:
+                if st.acked:
+                    continue
+                if getattr(st, "interrupted", False) or (
+                        st.state in ("running", "paused")
+                        and (now - st.heartbeat) > STALE_JOB_SECONDS):
                     out.append(st)
         return [s.to_dict() for s in out]
 
@@ -515,18 +558,12 @@ class Jobs:
                     # 本来就不占位，所以偏保守没有实际代价。
                     exclusive=((r["kind"] or "sync") in EXCLUSIVE_KINDS),
                 )
-                # 步骤存在 detail 里（update_job 的 detail 字段）
-                try:
-                    raw = r["detail"] or ""
-                    if raw.startswith("[") or raw.startswith("{"):
-                        import json as _json
-                        obj = _json.loads(raw)
-                        if isinstance(obj, dict) and isinstance(obj.get("steps"), list):
-                            st.steps = obj["steps"]
-                        elif isinstance(obj, list):
-                            st.steps = obj
-                except Exception:
-                    pass
+                # 步骤优先读独立的 `steps` 列；老库里存在 `detail` 的也认
+                st.steps = _load_steps(r)
+                # ★ 标记"上次异常退出" —— `/api/unfinished` 靠它挑出来提示用户。
+                #   原来这里写 state=error，而 `unfinished()` 只认 running/paused，
+                #   启动提示**永远不出现**。
+                st.interrupted = True
                 self._jobs[jid] = st
                 self._order.append(jid)
                 n += 1
@@ -535,14 +572,16 @@ class Jobs:
     def persist_steps(self, st: JobState, steps: List[Dict[str, Any]]) -> None:
         """把步骤写进数据库 —— 崩溃后才能恢复。
 
-        用 `detail` 字段存 JSON（它就是给"任务明细"用的自由字段）。
+        ★ 存在独立的 `steps` 列，**不截断**。
+          原来存在 `detail` 里并 `[:200000]` 截断：约 700 步以上就切成半截
+          JSON，重启后解析失败、步骤全丢；而且 `finish()` 收尾会用结果摘要
+          覆盖 `detail`，暂停后被杀的任务也一样丢步骤。实测三种情况都复现。
         """
         if self.db is None:
             return
         import json as _json
         try:
-            self.db.update_job(st.id, detail=_json.dumps(
-                {"steps": steps, "recoverable": True}, ensure_ascii=False)[:200000])
+            self.db.update_job(st.id, steps=_json.dumps(steps, ensure_ascii=False))
         except Exception as exc:
             # 落库失败 → 重启后这条任务没有可恢复的步骤，用户点"接着做完"会没反应。
             log.warning("保存可恢复步骤失败（崩溃后无法续做）: %s", exc)
