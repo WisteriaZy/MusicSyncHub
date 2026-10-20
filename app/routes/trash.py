@@ -114,14 +114,20 @@ def trash_restore(payload: Dict[str, Any] = Body(...),
     if _files:
         try:
             refresh_tracks(sid, [src.abs_path(p) for p in _files])
-        except Exception:                             # noqa: BLE001
-            pass
+        except Exception as exc:                      # noqa: BLE001
+            log.warning("还原文件后刷新索引失败 %s: %s", _files, exc)
     if _dirs:
+        # ★ 必须把**本次请求自己的独占 job** 交给 `scan_source` 托管。
+        #   不带 `job` 时它会自己 `get_jobs().create("scan")` —— 此刻请求正持有
+        #   `trash` 独占位,建独占任务直接抛 `JobBusy`,异常被下面那行 warning
+        #   吞掉:目录确实回到了磁盘,曲库和目录树里却查不到(进回收站时,
+        #   这条目录下的 track 记录已经被清掉了)。实测就是这么静默失败的。
         try:
             from ..core import scanner as S
             src_obj = manager.get(sid)
             for p in _dirs:
-                S.scan_source(sid, src_obj, db(), subpath=src.rel_path(src.abs_path(p)),
+                S.scan_source(sid, src_obj, db(), job=job,
+                              subpath=src.rel_path(src.abs_path(p)),
                               max_files=0)
         except Exception as exc:                      # noqa: BLE001
             log.warning("还原目录后重扫失败 %s: %s", _dirs, exc)
