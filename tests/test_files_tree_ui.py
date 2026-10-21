@@ -208,5 +208,81 @@ class TrashPanelParityTest(unittest.TestCase):
                       "还原后要原地刷新列表,不要关窗重开")
 
 
+class SelbarLiveStateTest(unittest.TestCase):
+    """选择栏的批量操作必须按**实时**选中集合干活。
+
+    用户反馈:"清除候选区里面的文件后,文件目录里仍然标注在候选区内;
+    文件夹树与文件目录、候选区总是显示不同步;复杂操作之后经常丢状态。"
+
+    实测复现出来的确定性缺陷(无头浏览器,同一状态下 A/B 对照):
+
+      · A:直接点「加入候选区」→ 提示"选中的文件都已经在候选区里了",
+        候选区仍是 0 个(按钮上连数字徽标都没有)—— 用户看到的就是"点了没反应";
+      · B:先让选择栏重建(取消勾选→再勾选)再点 → **成功**加入。
+
+    原因:按钮的 onclick 捕获的是**渲染那一刻**的 `picked` 快照,而局部重绘
+    `repaintSelbarOnly()` 只更新按钮外观(数字、disabled),**不重绑 handler** ——
+    于是界面上留着一个"看着能用、其实绑着几轮之前空集合"的按钮。
+
+    修法:handler 一律走 `selbarPicked()` 实时求值;`repaintSelbarOnly()` 也要
+    把「加入候选区」的 disabled 与数字徽标一起刷新;候选区监听只在 `mount()`
+    注册一次(写在 `render()` 里会每次重绘再注册一个,越积越多)。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.JS = (ROOT / "app" / "web" / "static" / "js"
+                  / "views.files.js").read_text(encoding="utf-8")
+
+    def _positions(self, needle: str) -> list:
+        out, pos = [], 0
+        while True:
+            k = self.JS.find(needle, pos)
+            if k < 0:
+                return out
+            out.append(k)
+            pos = k + 1
+
+    def test_both_selbars_bind_stage_add(self):
+        """选择栏有两套实现(普通列表 / 目录树结果视图),两套都要有入口。"""
+        self.assertEqual(
+            2, len(self._positions("bar.querySelector('#fb-stage-add').onclick")),
+            "两套选择栏都应绑定「加入候选区」")
+
+    def test_stage_add_uses_live_state(self):
+        for k in self._positions("bar.querySelector('#fb-stage-add').onclick"):
+            seg = self.JS[k:k + 1200]
+            # 普通列表那套把实时取数包成了 `sel()`(`const sel = () => selbarPicked();`),
+            # 树结果视图那套直接调 `selbarPicked()` —— 两者都是实时求值,都算合格。
+            self.assertTrue("selbarPicked()" in seg or "sel()" in seg,
+                            "「加入候选区」必须按此刻的选中集合算(实时)")
+            self.assertNotIn("stagedDid.has(did(t.path))", seg,
+                             "不能用渲染时的 picked/stagedDid 快照:"
+                             "局部重绘不重绑 handler,快照一旦过期,"
+                             "按钮就会看着能点、点下去什么也不做")
+
+    def test_repaint_refreshes_stage_button(self):
+        i = self.JS.index("function repaintSelbarOnly")
+        seg = self.JS[i:self.JS.index("function paintSelbarFrom", i)]
+        self.assertIn("bar.querySelector('#fb-stage-add')", seg,
+                      "局部重绘必须把「加入候选区」的状态一起刷新")
+        self.assertIn("addBtn.disabled = !fresh", seg,
+                      "禁用状态要按\"去掉已在候选区的之后还剩几个\"算")
+        self.assertIn("badge.textContent", seg,
+                      "数字徽标也要跟着更新,否则按钮上会挂着上一轮的数字")
+
+    def test_staging_listener_registered_once(self):
+        self.assertEqual(1, self.JS.count("Staging.onChange("),
+                         "候选区监听只能注册一次")
+        i_mount = self.JS.index("function mount(root)")
+        i_hook = self.JS.index("Staging.onChange(")
+        i_render = self.JS.index("function render()")
+        self.assertTrue(i_mount < i_hook < i_render,
+                        "监听要在 mount() 里注册;写在 render() 里会每次重绘"
+                        "再注册一个,越积越多")
+        self.assertEqual(1, self.JS.count("addEventListener('staging:move'"),
+                         "「执行移动」的事件监听也只能注册一次")
+
+
 if __name__ == "__main__":
     unittest.main()

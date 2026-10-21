@@ -37,11 +37,40 @@
   let treeExcluded = new Set();
   let treeLoading = false;
 
-  function mount(root) { el = root; }
+  function mount(root) {
+    el = root;
+    // ★ 候选区相关的监听**只在挂载时注册一次**。
+    //   原来这两行写在 `render()` 里:每次重绘都会**再注册一个**监听器,
+    //   越积越多 —— 候选区变一次就重复跑 N 遍重绘与刷新,是"复杂操作之后
+    //   状态错乱 / 丢状态"的放大器。
+    if (!mount._hooked) {
+      mount._hooked = true;
+      if (typeof Staging !== 'undefined') {
+        Staging.onChange(() => { paintStagedMarks(); refreshTreeChecks(); });
+      }
+      document.addEventListener('staging:move', () => moveStaged());
+    }
+  }
 
   const sourceId = () => State.activeSource
     || (State.sources[0] && State.sources[0].id) || '';
   const did = (p) => `${sourceId()}::${p}`;
+
+  // ★ 选择栏的"当前选中"必须**实时**算,不能捕获渲染那一刻的快照。
+  //
+  //   踩过的坑(用户:"清除候选区后按钮点了没反应 / 状态老是不同步"):
+  //   `#fb-stage-add` 这类按钮的 onclick 里用的是渲染时算好的 `picked` 快照,
+  //   而 `repaintSelbarOnly()`(局部重绘)只更新按钮的**外观**(数字、disabled),
+  //   **不重绑 handler** —— 于是界面上留下一个"看着可用、其实绑着几轮之前
+  //   空快照"的按钮:点下去只得到"选中的文件都已经在候选区里了",什么也不做。
+  //   实测对照:同一状态下先让选择栏重建再点就成功,直接点就失败。
+  //
+  //   现在统一走 `selbarPicked()`:每次点击都按**此刻**的 `checked` 与
+  //   当前列表集合现算;`selbarTracks` 只记录"选择栏当前代表哪一批文件"。
+  let selbarTracks = [];
+  const stagedSet = () => new Set(
+    (typeof Staging !== 'undefined') ? Staging.items.map((i) => i.did) : []);
+  const selbarPicked = () => selbarTracks.filter((t) => checked.has(did(t.path)));
 
   function render() {
     const srcs = State.sources || [];
@@ -118,16 +147,12 @@
       </div>
       <div id="fb-stage"></div>`;
 
-    // 候选区（跨目录暂存）：挂载一次，之后由 Staging 自己重绘
+    // 候选区(跨目录暂存):每次重绘 `#fb-stage` 都是新节点,必须重新 attach
+    // 候选区(跨目录暂存):每次重绘 `#fb-stage` 都是新节点,必须重新 attach
+    // (监听器在 `mount()` 里只注册一次,见那里的注释)
     if (typeof Staging !== 'undefined') {
       Staging.attach(el.querySelector('#fb-stage'));
-      // ★ 候选区一变,除了重画文件行的"已在候选区"标记,**目录树的勾选状态
-      //   也要跟着变**。只画文件行的话:文件被移出候选区(回到普通行)后,
-      //   树上那个目录仍然是"已勾选/半选" —— 看起来还以为这些文件被选着。
-      Staging.onChange(() => { paintStagedMarks(); refreshTreeChecks(); });
     }
-    // 候选区里的「执行移动」按钮由本视图实现（它知道怎么调 Executor）
-    document.addEventListener('staging:move', () => moveStaged());
 
     el.querySelector('#fb-src').onchange = (e) => {
       State.activeSource = e.target.value;
@@ -477,13 +502,33 @@
     bar.querySelectorAll('[data-needs-sel]').forEach((b) => {
       b.disabled = !n;
     });
+    // 「加入候选区」要按**实时**状态重算:去掉已在候选区的那几个之后还剩几个。
+    //   只看 n 会把它画成可用,但真正能加的可能就是 0(全都已在候选区里);
+    //   数字徽标也必须一起更新,否则按钮上会一直挂着上一轮的数字 ——
+    //   这正是"按钮看着能用、点下去什么也没发生"的来源之一。
+    const addBtn = bar.querySelector('#fb-stage-add');
+    if (addBtn) {
+      const staged = stagedSet();
+      const fresh = selbarPicked().filter((t) => !staged.has(did(t.path))).length;
+      addBtn.disabled = !fresh;
+      let badge = addBtn.querySelector('b');
+      if (fresh > 0) {
+        if (!badge) {
+          badge = document.createElement('b');
+          addBtn.appendChild(badge);
+        }
+        badge.textContent = `(${fresh})`;
+      } else if (badge) {
+        badge.remove();
+      }
+    }
     const one = bar.querySelector('[data-needs-one]');
     if (one) one.disabled = n !== 1;
   }
-
   function paintSelbarFrom(tracks, onSelectAll) {
     const bar = el.querySelector('#fb-selbar');
     if (!bar) return;
+    selbarTracks = tracks;      // 选择栏 handler 一律用实时集合(见文件顶部注释)
     const picked = tracks.filter((t) => checked.has(did(t.path)));
     const n = picked.length;
     const total = tracks.length;
@@ -535,7 +580,7 @@
     //   原来只有普通列表那个有「移动到…」，树结果视图里连移动都没有
     //   —— 用户在树里选完一批文件，能做的操作比普通列表少一截。
     const xfer1 = bar.querySelector('#fb-xfer');
-    if (xfer1) xfer1.onclick = () => transferDialog(picked);
+    if (xfer1) xfer1.onclick = () => transferDialog(selbarPicked());
     const allBox = bar.querySelector('#fb-all');
     if (allBox) {
       allBox.indeterminate = someOn;          // ← 半选：部分选中时一眼能看出
@@ -570,24 +615,33 @@
       };
     }
     bar.querySelector('#fb-stage-add').onclick = () => {
-      const add = picked.filter((t) => !stagedDid.has(did(t.path)));
-      if (!add.length) return UI.toast('选中的文件都已经在候选区里了', 'warn', 4000);
+      // ★ 按**此刻**的选中集合算,不要用渲染时的 `picked` 快照。
+      const now = selbarPicked();
+      const staged = stagedSet();
+      const add = now.filter((t) => !staged.has(did(t.path)));
+      const skipped = now.length - add.length;
+      if (!add.length) {
+        return UI.toast(now.length
+          ? '选中的文件都已经在候选区里了'
+          : '先在列表里勾选要加入候选区的文件', 'warn', 4000);
+      }
       Staging.add(add);
       UI.toast(`已加入候选区 ${add.length} 个`
-        + (stagedHere ? `（${stagedHere} 个已在候选区，跳过）` : ''), 'ok', 5000);
+        + (skipped ? `(${skipped} 个已在候选区,跳过)` : ''), 'ok', 5000);
       redraw();
     };
-    bar.querySelector('#fb-by-folder').onclick = () => collectByFolder(picked);
-    bar.querySelector('#fb-move').onclick = () => moveDialog(picked);
-    bar.querySelector('#fb-by-artist').onclick = () => collectBy('artist', picked);
-    bar.querySelector('#fb-by-album').onclick = () => collectBy('album', picked);
-    bar.querySelector('#fb-collect').onclick = () => collectDialog(picked);
-    bar.querySelector('#fb-trash').onclick = () => trashDialog(picked);
+    bar.querySelector('#fb-by-folder').onclick = () => collectByFolder(selbarPicked());
+    bar.querySelector('#fb-move').onclick = () => moveDialog(selbarPicked());
+    bar.querySelector('#fb-by-artist').onclick = () => collectBy('artist', selbarPicked());
+    bar.querySelector('#fb-by-album').onclick = () => collectBy('album', selbarPicked());
+    bar.querySelector('#fb-collect').onclick = () => collectDialog(selbarPicked());
+    bar.querySelector('#fb-trash').onclick = () => trashDialog(selbarPicked());
     bar.querySelector('#fb-analyze-one').onclick = () => {
-      if (picked.length === 1) Organizer.analyze(sourceId(), { path: picked[0].path });
+      const one = selbarPicked();
+      if (one.length === 1) Organizer.analyze(sourceId(), { path: one[0].path });
     };
     bar.querySelector('#fb-tagedit').onclick = () => {
-      TagEditor.open({ source: sourceId(), paths: picked.map((t) => t.path) });
+      TagEditor.open({ source: sourceId(), paths: selbarPicked().map((t) => t.path) });
     };
   }
 
@@ -1777,6 +1831,7 @@
     const bar = el.querySelector('#fb-selbar');
     if (!bar) return;
     const files = (listData && listData.files) || [];
+    selbarTracks = files;       // 选择栏 handler 一律用实时集合(见文件顶部注释)
     const picked = files.filter((t) => checked.has(did(t.path)));
     const n = picked.length;
     const total = files.length;
@@ -1830,7 +1885,7 @@
         paintList();
       };
     }
-    const sel = () => files.filter((t) => checked.has(did(t.path)));
+    const sel = () => selbarPicked();
     bar.querySelector('#fb-by-artist').onclick = () => collectBy('artist', sel());
     bar.querySelector('#fb-by-album').onclick = () => collectBy('album', sel());
     bar.querySelector('#fb-by-folder').onclick = () => collectByFolder(sel());
@@ -1840,18 +1895,25 @@
     bar.querySelector('#fb-collect').onclick = () => collectDialog(sel());
     bar.querySelector('#fb-trash').onclick = () => trashDialog(sel());
     bar.querySelector('#fb-stage-add').onclick = () => {
-      // 已经在候选区里的不再重复添加（Staging 内部也会去重，但这里先过滤，
-      // 好让 toast 的数字和按钮上的数字对得上）
-      const fresh = sel().filter((t) => !stagedDid.has(did(t.path)));
-      const skipped = sel().length - fresh.length;
+      // 已经在候选区里的不再重复添加(Staging 内部也会去重,但这里先过滤,
+      // 好让 toast 的数字和按钮上的数字对得上)。
+      // ★ `sel()` 是**实时**的:局部重绘 `repaintSelbarOnly()` 只更新按钮外观、
+      //   不重绑 handler,用渲染快照的话这里会拿到几轮之前的空集合 ——
+      //   按钮看着能用,点下去只回一句"都已经在候选区里了"。
+      const now = sel();
+      const stagedNow = stagedSet();
+      const fresh = now.filter((t) => !stagedNow.has(did(t.path)));
+      const skipped = now.length - fresh.length;
       if (!fresh.length) {
-        return UI.toast('选中的文件都已经在候选区里了', 'warn', 4000);
+        return UI.toast(now.length
+          ? '选中的文件都已经在候选区里了'
+          : '先在列表里勾选要加入候选区的文件', 'warn', 4000);
       }
       Staging.add(fresh);
       checked.clear();
       paintList();
       UI.toast(`已加入候选区 ${fresh.length} 个`
-        + (skipped ? `（${skipped} 个已在候选区，跳过）` : ''), 'ok', 5000);
+        + (skipped ? `(${skipped} 个已在候选区,跳过)` : ''), 'ok', 5000);
     };
     bar.querySelector('#fb-tagedit').onclick = () => {
       TagEditor.open({ source: sourceId(), paths: sel().map((t) => t.path) });
