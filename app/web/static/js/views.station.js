@@ -81,6 +81,41 @@ const Station = (() => {
             title="直接删掉选中批次（不动音乐库）">${U.icon('trash')}<span>删除批次</span></button>
         </div>
         <div id="stg-list" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card" id="tr-card">
+        <div class="row" style="justify-content:space-between;align-items:baseline">
+          <h3 style="margin:0">回收站</h3>
+          <span class="muted" id="tr-dir" style="font-size:11.5px"></span>
+        </div>
+        <div class="muted" style="font-size:12px;margin:4px 0 8px">
+          「删除」= 移进数据源根目录下的
+          <code class="mono">.music-sync-trash/日期/</code>,随时能还原;
+          还原默认<b>回到原位置</b>、默认<b>跳过同名</b>,绝不覆盖。
+          「彻底删除」要输入短语二次确认,不可恢复。
+        </div>
+        <div id="tr-stats" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
+        <div class="toolbar" style="margin-top:8px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px">数据源
+            <select id="tr-src" style="width:auto"></select></label>
+          <input type="search" id="tr-q" placeholder="按名称 / 原位置筛选" style="width:190px">
+          <label style="display:flex;align-items:center;gap:6px">日期
+            <select id="tr-day" style="width:auto"></select></label>
+          <button class="btn sm" id="tr-refresh">${U.icon('refresh')}<span>刷新</span></button>
+          <span class="sep-v"></span>
+          <button class="btn sm" id="tr-all">全选</button>
+          <button class="btn sm ghost" id="tr-none">全不选</button>
+          <div class="grow"></div>
+          <label style="display:flex;align-items:center;gap:6px">同名时
+            <select id="tr-policy" style="width:auto">
+              <option value="skip">跳过</option>
+              <option value="rename">自动改名</option>
+            </select></label>
+          <button class="btn sm primary" id="tr-restore" data-exclusive disabled>还原选中</button>
+          <button class="btn sm danger" id="tr-purge" data-exclusive disabled>彻底删除...</button>
+        </div>
+        <div id="tr-list" style="margin-top:10px"></div>
+        <div class="muted" id="tr-sum" style="margin-top:6px;font-size:12px"></div>
       </div>`;
     el.querySelector('#st-refresh').onclick = () => load();
     el.querySelector('#st-all').onclick = () => {
@@ -103,12 +138,31 @@ const Station = (() => {
     el.querySelector('#stg-del').onclick = deleteBatches;
     el.querySelector('#stg-clean-empty').onclick = () => cleanup('empty');
     el.querySelector('#stg-clean-stale').onclick = () => cleanup('stale');
+    // ---- 回收站(区域在本页下方) ----
+    el.querySelector('#tr-refresh').onclick = () => loadTrash();
+    el.querySelector('#tr-src').onchange = () => { trashPicked.clear(); loadTrash(); };
+    const trQ = el.querySelector('#tr-q');
+    trQ.oninput = () => { trashFilter = trQ.value; paintTrashList(); };
+    el.querySelector('#tr-day').onchange = () => {
+      trashDay = el.querySelector('#tr-day').value;
+      paintTrashList();
+    };
+    el.querySelector('#tr-all').onclick = () => {
+      shownTrash().forEach((i) => trashPicked.add(i.rel));
+      paintTrashList();
+    };
+    el.querySelector('#tr-none').onclick = () => {
+      shownTrash().forEach((i) => trashPicked.delete(i.rel));
+      paintTrashList();
+    };
+    el.querySelector('#tr-restore').onclick = doTrashRestore;
+    el.querySelector('#tr-purge').onclick = doTrashPurge;
   }
 
   async function load() {
     const box = el.querySelector('#st-list');
     if (box) box.innerHTML = '<div class="pad muted">读取中转站…</div>';
-    await Promise.all([loadStation(), loadStaging()]);
+    await Promise.all([loadStation(), loadStaging(), loadTrash()]);
   }
 
   async function loadStation() {
@@ -654,6 +708,297 @@ const Station = (() => {
   const destSource = () => State.activeSource
     || (State.sources[0] && State.sources[0].id) || '';
 
+
+  /* ============================================================
+     回收站(本页下方那块区域)
+
+     为什么放在这里、而不是文件浏览页的弹窗里:
+       · 回收站是"看清楚再动手"的地方 —— 弹窗每操作一次就得重开,关掉就没了
+         状态;还原/彻底删除都要等后台(还原目录还要重扫),弹窗一关用户就没有
+         任何进度可看,连"刚才到底做了什么"都留不下;
+       · 中转站页本来就是"这些文件还没安排"的地方,回收站是同一类东西;
+       · 形态和上面两块一致:统计 + 工具栏 + 列表 + 就地刷新。
+     回收站**只支持本地 / 映射盘**源(网络源的 `remove()` 语义各不一样),
+     所以这里单独有个数据源下拉,只列本地源。
+     ============================================================ */
+  let trash = { items: [], bytes: 0, total: 0, root: '', source: '' };
+  let trashPicked = new Set();      // 选中的条目 rel
+  let trashFilter = '';
+  let trashDay = '';
+  let trashBusy = false;
+
+  const trashSources = () => (State.sources || [])
+    .filter((s) => (s.type || 'local') === 'local');
+
+  /** 当前看哪个源的回收站:下拉优先 → 当前选中的源(本地)→ 第一个本地源。 */
+  function trashSourceId() {
+    const sel = el.querySelector('#tr-src');
+    if (sel && sel.value) return sel.value;
+    const loc = trashSources();
+    if (loc.some((s) => s.id === State.activeSource)) return State.activeSource;
+    return loc.length ? loc[0].id : '';
+  }
+
+  function paintTrashSources() {
+    const sel = el.querySelector('#tr-src');
+    if (!sel) return;
+    const loc = trashSources();
+    const want = trashSourceId();
+    sel.innerHTML = loc.length
+      ? loc.map((s) => `<option value="${U.esc(s.id)}">${U.esc(s.name || s.id)}</option>`).join('')
+      : '<option value="">(没有本地数据源)</option>';
+    if (want) sel.value = want;
+    sel.disabled = !loc.length;
+  }
+
+  const shownTrash = () => {
+    const q = (trashFilter || '').trim().toLowerCase();
+    return (trash.items || []).filter((i) => {
+      if (trashDay && String(i.date || '') !== trashDay) return false;
+      if (!q) return true;
+      return `${i.name || ''} ${i.origin || ''} ${i.rel || ''}`.toLowerCase().includes(q);
+    });
+  };
+
+  /** 按日期分组 —— 回收站本身就是按 `<库根>/.music-sync-trash/<日期>/` 存的。 */
+  function trashGroups() {
+    const map = new Map();
+    shownTrash().forEach((i) => {
+      const d = String(i.date || i.rel || '').split('/')[0] || '';
+      if (!map.has(d)) map.set(d, []);
+      map.get(d).push(i);
+    });
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));   // 新日期在前
+  }
+
+  async function loadTrash() {
+    paintTrashSources();
+    const box = el.querySelector('#tr-list');
+    const sid = trashSourceId();
+    if (!sid) {
+      if (box) {
+        box.innerHTML = `<div class="pad muted">
+          回收站只支持本地 / 映射盘数据源。先去「数据源」添加一个。</div>`;
+      }
+      return;
+    }
+    if (box) box.innerHTML = '<div class="pad muted">读取回收站...</div>';
+    try {
+      trash = await API.trash(sid);
+    } catch (e) {
+      if (box) {
+        box.innerHTML = `<div class="pad" style="color:var(--danger)">${U.esc(e.message)}</div>`;
+      }
+      return;
+    }
+    // 已经不存在的条目要从选中集合里清掉(还原 / 彻底删除之后)
+    const alive = new Set((trash.items || []).map((i) => i.rel));
+    Array.from(trashPicked).forEach((k) => { if (!alive.has(k)) trashPicked.delete(k); });
+    paintTrash();
+  }
+
+  function paintTrash() {
+    const items = trash.items || [];
+    const days = new Set(items.map((i) => String(i.date || '')).filter(Boolean));
+    const dirEl = el.querySelector('#tr-dir');
+    if (dirEl) dirEl.textContent = trash.root || '';
+    const dirs = items.filter((i) => i.is_dir).length;
+    const sorted = [...days].sort();
+    const st = el.querySelector('#tr-stats');
+    if (st) {
+      st.innerHTML = UI.stat('条目', items.length, dirs ? `含 ${dirs} 个目录` : '没有目录')
+        + UI.stat('占用', U.fmtBytes(trash.bytes || 0), '还在占磁盘,清掉才释放')
+        + UI.stat('日期', days.size, days.size
+          ? (sorted.length === 1 ? `全部是 ${sorted[0]}`
+            : `${sorted[0]} ~ ${sorted[sorted.length - 1]}`)
+          : '');
+    }
+    // 日期下拉:保留当前选择 —— 重画一次就跳回"全部"会让人以为筛选没生效
+    const daySel = el.querySelector('#tr-day');
+    if (daySel) {
+      const opts = sorted.slice().reverse();
+      if (trashDay && !opts.includes(trashDay)) trashDay = '';
+      daySel.innerHTML = '<option value="">全部日期</option>'
+        + opts.map((d) => `<option value="${U.esc(d)}">${U.esc(d)}</option>`).join('');
+      daySel.value = trashDay;
+    }
+    paintTrashList();
+  }
+
+  function paintTrashList() {
+    const box = el.querySelector('#tr-list');
+    if (!box) return;
+    const items = trash.items || [];
+    if (!items.length) {
+      box.innerHTML = `<div class="stg-empty">回收站是空的。<br>
+        <span class="muted">删除文件时会移到
+        <code class="mono">.music-sync-trash/日期/</code>,可在这里还原。</span></div>`;
+      paintTrashButtons();
+      return;
+    }
+    const groups = trashGroups();
+    if (!groups.length) {
+      box.innerHTML = '<div class="pad muted">没有符合筛选条件的条目。</div>';
+      paintTrashButtons();
+      return;
+    }
+    box.innerHTML = groups.map(([day, list]) => {
+      const bytes = list.reduce((a, x) => a + (x.size || 0), 0);
+      const allOn = list.length > 0 && list.every((x) => trashPicked.has(x.rel));
+      return `
+      <section class="tr-day" data-day="${U.esc(day)}">
+        <div class="row" style="gap:8px;align-items:center;margin:8px 0 4px">
+          <b class="mono">${U.esc(day || '(未记录日期)')}</b>
+          <span class="muted" style="font-size:12px">${list.length} 项 · ${U.fmtBytes(bytes)}</span>
+          <div class="grow"></div>
+          <button class="btn sm ghost" data-dayall="${U.esc(day)}">
+            ${allOn ? '取消本日' : '选中本日'}</button>
+        </div>
+        <div class="tbl-wrap" style="max-height:34vh">
+          <table class="data"><thead><tr>
+            <th></th><th>名称</th><th>原位置</th>
+            <th class="right">大小</th><th class="right">时间</th>
+          </tr></thead><tbody>
+          ${list.map((it) => `<tr class="${trashPicked.has(it.rel) ? 'sel' : ''}">
+            <td><input type="checkbox" data-tritem="${U.esc(it.rel)}"
+              ${trashPicked.has(it.rel) ? 'checked' : ''}></td>
+            <td class="ell" title="${U.esc(it.rel)}">${U.esc(it.name)}${
+              it.is_dir ? ' <span class="tag">目录</span>' : ''}</td>
+            <td class="ell muted" style="font-size:11.5px" title="${U.esc(it.origin || '')}">${
+              it.origin ? U.esc(it.origin)
+                : '<span class="muted">(未记录,还原时放回库根目录)</span>'}</td>
+            <td class="num">${it.is_dir ? '—' : U.fmtBytes(it.size || 0)}</td>
+            <td class="num">${it.mtime ? U.fmtDate(it.mtime) : '-'}</td>
+          </tr>`).join('')}
+          </tbody></table>
+        </div>
+      </section>`;
+    }).join('');
+
+    box.querySelectorAll('input[data-tritem]').forEach((cb) => {
+      cb.onchange = () => {
+        const rel = cb.dataset.tritem;
+        if (cb.checked) trashPicked.add(rel); else trashPicked.delete(rel);
+        const tr = cb.closest('tr');
+        if (tr) tr.classList.toggle('sel', cb.checked);
+        paintTrashButtons();
+      };
+    });
+    box.querySelectorAll('[data-dayall]').forEach((b) => {
+      b.onclick = () => {
+        const day = b.dataset.dayall;
+        const list = (trash.items || []).filter((i) => String(i.date || '') === day);
+        const allOn = list.length > 0 && list.every((i) => trashPicked.has(i.rel));
+        list.forEach((i) => {
+          if (allOn) trashPicked.delete(i.rel); else trashPicked.add(i.rel);
+        });
+        paintTrashList();
+      };
+    });
+    paintTrashButtons();
+  }
+
+  const chosenTrash = () => (trash.items || []).filter((i) => trashPicked.has(i.rel));
+
+  function paintTrashButtons() {
+    const sel = chosenTrash();
+    const rb = el.querySelector('#tr-restore');
+    const pb = el.querySelector('#tr-purge');
+    if (rb) {
+      if (!trashBusy) rb.textContent = '还原选中';
+      rb.disabled = trashBusy || !sel.length;
+    }
+    if (pb) pb.disabled = trashBusy || !sel.length;
+    const sum = el.querySelector('#tr-sum');
+    if (sum) {
+      sum.textContent = sel.length
+        ? `已选 ${sel.length} 项 · ${U.fmtBytes(sel.reduce((a, x) => a + (x.size || 0), 0))}`
+        : `共 ${(trash.items || []).length} 项 · ${U.fmtBytes(trash.bytes || 0)}`;
+    }
+  }
+
+  /** 干活时把按钮定住并说清在干什么 —— 做完一定恢复。 */
+  async function withTrashBusy(label, fn) {
+    const rb = el.querySelector('#tr-restore');
+    trashBusy = true;
+    if (rb) { rb.dataset.label = rb.textContent; rb.textContent = label; }
+    paintTrashButtons();
+    try {
+      return await fn();
+    } finally {
+      trashBusy = false;
+      if (rb) rb.textContent = rb.dataset.label || '还原选中';
+      paintTrashButtons();
+    }
+  }
+
+  async function doTrashRestore() {
+    const sel = chosenTrash();
+    if (!sel.length) return UI.toast('先勾选要还原的条目', 'warn', 3000);
+    const policy = (el.querySelector('#tr-policy') || {}).value || 'skip';
+    await withTrashBusy('还原中...', async () => {
+      try {
+        const r = await App.runExclusive('trash', () => API.trashRestore({
+          source: trashSourceId(), items: sel.map((x) => ({ rel: x.rel })), policy,
+        }));
+        const done = (r.results || []).filter((x) => x.state === 'done').length;
+        const rest = (r.results || []).length - done;
+        sel.forEach((x) => trashPicked.delete(x.rel));
+        if (rest) {
+          const names = (r.results || []).filter((x) => x.state !== 'done')
+            .slice(0, 3).map((x) => x.rel).join('、');
+          UI.toast(`已还原 ${done} 项;${rest} 项未还原(同名跳过或出错):${names}`,
+            done ? 'warn' : 'err', 9000);
+        } else {
+          UI.toast(`已还原 ${done} 项`, 'ok', 5000);
+        }
+        await loadTrash();
+        // 还原动了磁盘和索引:让文件浏览 / 曲库也跟着刷新,别留下过期列表
+        try {
+          const fv = App.viewApi('files');
+          if (fv && fv.reload) fv.reload();
+        } catch (e) { /* 视图没挂载就算了 */ }
+        try { if (App.loadSources) await App.loadSources(); } catch (e) { /* ignore */ }
+      } catch (e) {
+        UI.toast('还原失败:' + (e && e.message ? e.message : e), 'err', 9000);
+      }
+    });
+  }
+
+  async function doTrashPurge() {
+    const sel = chosenTrash();
+    if (!sel.length) return UI.toast('先勾选要彻底删除的条目', 'warn', 3000);
+    const ok = await UI.confirmHard({
+      title: '彻底删除回收站里的文件?',
+      phrase: '永久删除',
+      message: `这 ${sel.length} 项会从磁盘上<b>永久删除</b>,不进回收站,无法恢复。`,
+      details: sel.slice(0, 20).map((x) => x.rel),
+      okText: '永久删除',
+    });
+    if (!ok) return;
+    await withTrashBusy('删除中...', async () => {
+      try {
+        const r = await App.runExclusive('trash', () => API.trashPurge({
+          source: trashSourceId(), items: sel.map((x) => ({ rel: x.rel })), confirm: true,
+        }));
+        sel.forEach((x) => trashPicked.delete(x.rel));
+        await loadTrash();
+        UI.toast(`已彻底删除 ${r.done} 项`, 'ok', 5000);
+      } catch (e) {
+        UI.toast('删除失败:' + (e && e.message ? e.message : e), 'err', 9000);
+      }
+    });
+  }
+
+  /** 从别的页面(文件浏览的「回收站」按钮)跳进来时,把这块区域滚到眼前。 */
+  function focusTrash() {
+    const card = el.querySelector('#tr-card');
+    if (!card) return;
+    try { card.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { card.scrollIntoView(); }
+    const old = card.style.outline;
+    card.style.outline = '2px solid var(--accent, #4a9eff)';
+    setTimeout(() => { card.style.outline = old; }, 1400);
+  }
   App.registerView('station', { mount, render, load });
-  return { load };
+  return { load, focusTrash };
 })();

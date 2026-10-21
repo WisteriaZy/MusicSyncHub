@@ -107,7 +107,7 @@
                 title="扫描重复曲目：内容相同或高度相似的分成一组，可勾选要保留的">
           ${U.icon('compare')}<span>查重</span></button>
         <button class="btn sm ghost" id="fb-recycle" data-exclusive
-                title="查看回收站：可以还原回原位置，或彻底删除">
+                title="打开「中转站」页的回收站区域:可以还原回原位置,或彻底删除">
           ${U.icon('trash')}<span>回收站</span></button>
         <span class="sep-v"></span>
         <div class="fb-search">
@@ -177,8 +177,18 @@
     el.querySelector('#fb-upload').onclick = () => Uploader.open({ source: sourceId() });
     // 查重就在文件浏览里直接开：发现重复后往往要回到文件列表去处理，
     // 让用户先跳到「查重」标签页再切回来是多余的往返。
+    // 回收站的管理界面不在这里弹窗 —— 它做成了「中转站」页下方的一块独立区域
+    // (和中转站/上传暂存区同一套形态:统计 + 工具栏 + 列表 + 就地刷新)。
+    // 这里只负责跳过去并把这块区域滚到视野里。理由:弹窗每操作一次就得重开、
+    // 关闭后状态就没了,而回收站是要"看清楚再动手"的地方。
     const _tb = el.querySelector('#fb-recycle');
-    if (_tb) _tb.onclick = () => openTrash();
+    if (_tb) {
+      _tb.onclick = () => {
+        App.setView('station');
+        const st = App.viewApi('station');
+        if (st && st.focusTrash) st.focusTrash();
+      };
+    }
     el.querySelector('#fb-dup').onclick = () => openDedup();
     el.querySelector('#fb-tb-none').onclick = () => {
       treePicked.clear();
@@ -1316,245 +1326,6 @@
     });
   }
 
-  /* ------------------------------------------------------- 回收站 */
-
-  /**
-   * 回收站：列出 / 还原 / 彻底删除。
-   *
-   * 为什么加这一块：界面一直写着"删除 = 移入回收站，可恢复"，但应用里
-   * 从来没有还原入口 —— 用户得自己去资源管理器翻 `.music-sync-trash\日期\`，
-   * 还得记得它原来在哪。这里把承诺补上。
-   *
-   * 还原默认**回到原位置**（删除时记在 `_origin.json` 里），默认**跳过同名**，
-   * 绝不覆盖。彻底删除要输入短语二次确认。
-   */
-  async function openTrash() {
-    const sid = State.activeSource;
-    if (!sid) return UI.toast('先选一个数据源', 'warn', 3000);
-
-    // ★ 这一块和中转站对齐的几件事(原来做不到,用户反馈"界面不同步"):
-    //   · 筛选框(按名称 / 原位置);
-    //   · 全选 + 每行勾选 + 半选状态;
-    //   · 显示删除**日期**分组依据(回收站本身就是按日期存的);
-    //   · 还原 / 删除之后**原地刷新列表**,不再"关掉窗口再重新打开" ——
-    //     那种做法每操作一次就要重新找一遍,而且中间那一下很像"按钮没反应";
-    //   · 忙的时候按钮明确禁用并显示"还原中...",做完一定恢复(不再出现
-    //     "点了没响应");
-    //   · 走 `App.runExclusive`,和别的写操作一样受独占位约束、给出明确提示 ——
-    //     两个动作按钮同时标 `data-exclusive`,别的任务在跑时会被**提前禁用**
-    //     并说明原因(中转站就是这么标的),而不是点下去撞 409 报"还原失败"。
-    let data = { items: [], bytes: 0, root: '' };
-    let filter = '';
-    const picked = new Set();
-    let busy = false;
-
-    const ctl = UI.modal({
-      title: '回收站',
-      size: 'lg',
-      body: `<div id="tr-shell"></div>`,
-      footer: `<span class="muted grow" id="tr-sum"></span>
-               <button class="btn" id="tr-close">关闭</button>`,
-    });
-    ctl.footer.querySelector('#tr-close').onclick = () => ctl.close();
-    const shell = ctl.body.querySelector('#tr-shell');
-    const sum = ctl.footer.querySelector('#tr-sum');
-    const head = ctl.el.querySelector('.modal-hd h2');
-
-    const shown = () => {
-      const q = filter.trim().toLowerCase();
-      if (!q) return data.items;
-      return data.items.filter((it) =>
-        (`${it.name || ''} ${it.origin || ''} ${it.rel || ''}`).toLowerCase().includes(q));
-    };
-
-    /** 只重画表格行(不动筛选框,否则每敲一个字都会失焦)。 */
-    function paintRows() {
-      const list = shown();
-      const tb = shell.querySelector('#tr-rows');
-      const day = (r) => String(r.rel || '').split('/')[0] || '';
-      if (!list.length) {
-        tb.innerHTML = `<tr><td colspan="6" class="muted" style="padding:14px">
-          ${data.items.length ? '没有匹配的条目' : '回收站是空的'}</td></tr>`;
-      } else {
-        tb.innerHTML = list.map((it) => `
-          <tr>
-            <td><input type="checkbox" data-tr="${U.esc(it.rel)}"
-                 ${picked.has(it.rel) ? 'checked' : ''}></td>
-            <td class="ell" title="${U.esc(it.rel)}">${U.esc(it.name)}</td>
-            <td class="ell muted" style="font-size:11.5px"
-                title="${U.esc(it.origin || '')}">${it.origin
-                  ? U.esc(it.origin)
-                  : '<span class="muted">(未记录,还原时放回库根目录)</span>'}</td>
-            <td class="muted" style="font-size:11.5px">${U.esc(day(it))}</td>
-            <td class="num">${it.is_dir ? '目录' : U.fmtBytes(it.size)}</td>
-            <td class="num">${it.mtime ? U.fmtDate(it.mtime) : '-'}</td>
-          </tr>`).join('');
-      }
-      tb.querySelectorAll('input[data-tr]').forEach((cb) => {
-        cb.onchange = () => {
-          if (cb.checked) picked.add(cb.dataset.tr); else picked.delete(cb.dataset.tr);
-          syncAll(tb);
-          paintSum();
-        };
-      });
-      syncAll(tb);
-      paintSum();
-    }
-
-    function syncAll(tb) {
-      const all = shell.querySelector('#tr-all');
-      if (!all) return;
-      const boxes = [...tb.querySelectorAll('input[data-tr]')];
-      const on = boxes.filter((b) => b.checked).length;
-      all.checked = boxes.length > 0 && on === boxes.length;
-      all.indeterminate = on > 0 && on < boxes.length;
-    }
-
-    function paintSum() {
-      const sel = chosen();
-      sum.textContent = sel.length
-        ? `已选 ${sel.length} 项 · ${U.fmtBytes(sel.reduce((a, x) => a + (x.size || 0), 0))}`
-        : `共 ${data.items.length} 项 · ${U.fmtBytes(data.bytes || 0)}`;
-      const rb = shell.querySelector('#tr-restore');
-      const pb = shell.querySelector('#tr-purge');
-      if (rb) rb.disabled = busy || !sel.length;
-      if (pb) pb.disabled = busy || !sel.length;
-    }
-
-    const chosen = () => data.items.filter((it) => picked.has(it.rel));
-
-    /** 重新读一遍回收站并重画(还原 / 删除之后用,窗口保持开着)。 */
-    async function reload(keepMsg) {
-      try {
-        data = await API.trash(sid);
-      } catch (e) {
-        return UI.toast('读回收站失败:' + e.message, 'err', 7000);
-      }
-      const have = new Set((data.items || []).map((it) => it.rel));
-      [...picked].forEach((r) => { if (!have.has(r)) picked.delete(r); });
-      head.textContent = `回收站（${data.items.length} 项 · ${U.fmtBytes(data.bytes || 0)}）`;
-      renderShell();
-      if (keepMsg) UI.toast(keepMsg.msg, keepMsg.type || 'ok', 5000);
-    }
-
-    function renderShell() {
-      const empty = !data.items.length;
-      shell.innerHTML = `
-        <div class="muted" style="margin-bottom:8px">
-          位置:<code>${U.esc(data.root || '')}</code> ·
-          还原默认回到原位置,<b>绝不覆盖</b>同名文件。
-        </div>
-        <div class="row wrap" style="gap:10px;margin-bottom:8px;align-items:center">
-          <input type="search" id="tr-q" placeholder="按名称 / 原位置筛选"
-                 value="${U.esc(filter)}" style="width:210px" ${empty ? 'disabled' : ''}>
-          <label class="check"><input type="checkbox" id="tr-all" ${empty ? 'disabled' : ''}> 全选</label>
-          <span class="sep-v"></span>
-          <label style="display:flex;align-items:center;gap:6px">同名时
-            <select id="tr-policy" style="width:auto">
-              <option value="skip">跳过</option>
-              <option value="rename">自动改名</option>
-            </select>
-          </label>
-          <div class="grow"></div>
-          <button class="btn sm primary" id="tr-restore" data-exclusive disabled>还原选中</button>
-          <button class="btn sm" id="tr-purge" data-exclusive disabled>彻底删除...</button>
-        </div>
-        ${empty ? `<div class="stg-empty">回收站是空的。<br>
-          <span class="muted">删除文件时会移到
-          <code class="mono">.music-sync-trash/日期/</code>,可在这里还原。</span></div>`
-        : `<div class="tbl-wrap" style="max-height:48vh;overflow:auto">
-          <table class="tbl"><thead><tr>
-            <th></th><th>名称</th><th>原位置</th><th>删除日期</th>
-            <th class="num">大小</th><th class="num">时间</th>
-          </tr></thead><tbody id="tr-rows"></tbody></table>
-        </div>`}`;
-      if (empty) { sum.textContent = '回收站是空的'; return; }
-      const q = shell.querySelector('#tr-q');
-      q.oninput = () => { filter = q.value; paintRows(); };
-      shell.querySelector('#tr-all').onchange = (e) => {
-        shell.querySelectorAll('input[data-tr]').forEach((cb) => {
-          cb.checked = e.target.checked;
-          if (e.target.checked) picked.add(cb.dataset.tr); else picked.delete(cb.dataset.tr);
-        });
-        syncAll(shell.querySelector('#tr-rows'));
-        paintSum();
-      };
-      shell.querySelector('#tr-restore').onclick = doRestore;
-      shell.querySelector('#tr-purge').onclick = doPurge;
-      paintRows();
-    }
-
-    /** 干活时把两个按钮定住,并显示在干什么 —— 做完一定恢复。 */
-    async function run(label, fn) {
-      const rb = shell.querySelector('#tr-restore');
-      const pb = shell.querySelector('#tr-purge');
-      busy = true;
-      if (rb) { rb.dataset.label = rb.textContent; rb.textContent = label; }
-      paintSum();
-      try {
-        return await fn();
-      } finally {
-        busy = false;
-        if (rb && rb.dataset.label) rb.textContent = rb.dataset.label;
-        paintSum();
-      }
-    }
-
-    async function doRestore() {
-      const sel = chosen();
-      if (!sel.length) return UI.toast('先勾选要还原的项', 'warn', 3000);
-      const policy = shell.querySelector('#tr-policy').value;
-      await run('还原中...', async () => {
-        try {
-          const r = await App.runExclusive('trash', () => API.trashRestore({
-            source: sid, items: sel.map((x) => ({ rel: x.rel })), policy,
-          }));
-          const done = (r.results || []).filter((x) => x.state === 'done').length;
-          const rest = (r.results || []).length - done;
-          sel.forEach((x) => picked.delete(x.rel));
-          if (rest) {
-            const names = (r.results || []).filter((x) => x.state !== 'done')
-              .slice(0, 3).map((x) => x.rel).join('、');
-            UI.toast(`已还原 ${done} 项;${rest} 项未还原(同名跳过或出错):${names}`,
-              done ? 'warn' : 'err', 9000);
-          } else {
-            UI.toast(`已还原 ${done} 项`, 'ok', 5000);
-          }
-          await reload();
-          await load();                       // 右侧目录 + 目录树一起刷新
-          App.loadSources && App.loadSources();
-        } catch (e) {
-          UI.toast('还原失败:' + (e && e.message ? e.message : e), 'err', 9000);
-        }
-      });
-    }
-
-    async function doPurge() {
-      const sel = chosen();
-      if (!sel.length) return UI.toast('先勾选要彻底删除的项', 'warn', 3000);
-      const yes = await UI.confirmHard({
-        title: '彻底删除回收站里的文件?',
-        phrase: '永久删除',
-        message: `这 ${sel.length} 项会从磁盘上<b>永久删除</b>,不进回收站,无法恢复。`,
-        details: sel.map((x) => x.rel),
-        okText: '永久删除',
-      });
-      if (!yes) return;
-      await run('删除中...', async () => {
-        try {
-          const r = await App.runExclusive('trash', () => API.trashPurge({
-            source: sid, items: sel.map((x) => ({ rel: x.rel })), confirm: true,
-          }));
-          sel.forEach((x) => picked.delete(x.rel));
-          await reload({ msg: `已彻底删除 ${r.done} 项`, type: 'ok' });
-        } catch (e) {
-          UI.toast('删除失败:' + (e && e.message ? e.message : e), 'err', 9000);
-        }
-      });
-    }
-
-    await reload();
-  }
   /* ------------------------------------------------------------ 列表 */
   function crumb() {
     const box = el.querySelector('#fb-crumb');

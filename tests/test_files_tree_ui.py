@@ -157,55 +157,79 @@ class TreeMultiSelectTest(unittest.TestCase):
 
 
 class TrashPanelParityTest(unittest.TestCase):
-    """回收站面板与中转站对齐的几条机制(用户反馈"按钮没反应 / 界面不同步")。
+    """回收站的管理界面:内嵌在中转站页下方的一块区域,不再是弹窗。
 
-    这些是"源码契约",没有接口可测,所以在这里按源码锁住:
+    用户要求:"回收站像暂存区 / 中转站一样,把管理界面做到里面去",
+    并且要"按日期分组/筛选(便于清掉上个月的)"。
 
-      · 两个动作按钮必须标 `data-exclusive` —— `app.js` 靠这个属性在**别的任务
-        在跑时提前禁用**并说明原因。不标的话按钮看着能点,点下去才撞 409,
-        报出来还是"还原失败"(误导),用户的感觉就是"点了没响应"。
-        中转站(`#st-restore` 等)一直是这么标的。
-      · 还原 / 彻底删除都必须走 `App.runExclusive`(受独占位约束),
-        而不是裸调 API。
-      · 忙的时候要有禁用 + 文案,并且 `finally` 一定恢复。
-      · 还原 / 删除之后**原地刷新列表**(`reload()`),不再关窗重开。
+    于是:
+      · 文件浏览里的「回收站」按钮只负责**跳过去**(`setView('station')` +
+        `focusTrash()`),不再弹窗 —— 弹窗关掉就没状态,而还原目录还要等后台
+        重扫,弹窗一关用户看不到任何进度;
+      · 回收站区域与中转站 / 上传暂存区同一套形态:统计 + 工具栏 + 列表 +
+        就地刷新;
+      · 按 `<库根>/.music-sync-trash/<日期>/` 分组显示,带日期下拉与关键词筛选;
+      · 两个动作按钮标 `data-exclusive`(别的任务在跑时提前禁用并说明原因),
+        并走 `App.runExclusive('trash', ...)` 受独占位约束;
+      · 忙的时候禁用 + 文案,`finally` 一定恢复。
+
+    这些都是"源码契约",没有接口可测,所以在源码上锁住。
     """
 
     @classmethod
     def setUpClass(cls):
-        js = (ROOT / "app" / "web" / "static" / "js"
-              / "views.files.js").read_text(encoding="utf-8")
-        i = js.index("async function openTrash")
-        cls.PANEL = js[i:js.index("function crumb()", i)]
+        cls.ST = (ROOT / "app" / "web" / "static" / "js"
+                  / "views.station.js").read_text(encoding="utf-8")
+        cls.FL = (ROOT / "app" / "web" / "static" / "js"
+                  / "views.files.js").read_text(encoding="utf-8")
+
+    def test_area_is_a_card_in_station_page(self):
+        self.assertIn('id="tr-card"', self.ST, "回收站要做成中转站页里的一块区域")
+        self.assertIn("async function loadTrash(", self.ST)
+        # 每次进中转站页都一起刷新(和 loadStation / loadStaging 并列)
+        self.assertIn("Promise.all([loadStation(), loadStaging(), loadTrash()])",
+                      self.ST)
+
+    def test_grouped_by_date_with_filter(self):
+        self.assertIn("function trashGroups(", self.ST, "要按日期分组")
+        self.assertIn("data-dayall=", self.ST, "每组要有「选中本日」")
+        self.assertIn('id="tr-day"', self.ST, "要有日期筛选下拉")
+        self.assertIn('id="tr-q"', self.ST, "要有筛选框")
+        self.assertIn("trashDay", self.ST)
 
     def test_action_buttons_marked_exclusive(self):
         for bid in ("tr-restore", "tr-purge"):
-            m = re.search(r'<button[^>]*id="%s"[^>]*>' % bid, self.PANEL)
+            m = re.search(r'<button[^>]*id="%s"[^>]*>' % bid, self.ST)
             self.assertIsNotNone(m, f"没找到按钮 {bid}")
             self.assertIn("data-exclusive", m.group(0),
                           f"#{bid} 没标 data-exclusive:别的任务在跑时不会提前禁用,"
-                          f"点下去才撞 409,提示还是'还原失败'"
-                          f"(用户感觉就是'点了没反应')")
+                          f"点下去才撞 409,提示还是'还原失败'")
 
     def test_actions_go_through_run_exclusive(self):
         for call in ("runExclusive('trash', () => API.trashRestore(",
                      "runExclusive('trash', () => API.trashPurge("):
-            self.assertIn(call, self.PANEL,
+            self.assertIn(call, self.ST,
                           "还原 / 彻底删除必须走 App.runExclusive(独占位 + 明确提示)")
 
     def test_busy_state_disables_and_always_restores(self):
-        seg = self.PANEL[self.PANEL.index("async function run("):]
-        seg = seg[:seg.index("async function doRestore")]
-        self.assertIn("busy = true", seg)
+        seg = self.ST[self.ST.index("async function withTrashBusy("):]
+        seg = seg[:seg.index("async function doTrashRestore")]
+        self.assertIn("trashBusy = true", seg)
         self.assertIn("finally", seg)
-        self.assertIn("busy = false", seg)
-        self.assertIn("disabled = busy", self.PANEL,
-                      "忙的时候按钮必须真的禁用")
+        self.assertIn("trashBusy = false", seg)
+        self.assertIn("rb.disabled = trashBusy", self.ST, "忙的时候按钮必须真的禁用")
 
-    def test_refreshes_list_in_place(self):
-        self.assertIn("async function reload(", self.PANEL)
-        self.assertIn("await reload()", self.PANEL,
-                      "还原后要原地刷新列表,不要关窗重开")
+    def test_refreshes_in_place(self):
+        self.assertIn("await loadTrash();", self.ST,
+                      "还原 / 删除后要就地刷新这块区域,不要整页重开")
+
+    def test_files_view_button_is_a_jump_not_a_popup(self):
+        self.assertNotIn("function openTrash(", self.FL,
+                         "弹窗版应已删除,只留一个跳转入口(两套实现必然不同步)")
+        self.assertIn("App.setView('station')", self.FL)
+        self.assertIn("focusTrash", self.FL)
+        self.assertIn("function focusTrash(", self.ST, "中转站视图要暴露 focusTrash")
+        self.assertIn("return { load, focusTrash }", self.ST)
 
 
 class SelbarLiveStateTest(unittest.TestCase):
