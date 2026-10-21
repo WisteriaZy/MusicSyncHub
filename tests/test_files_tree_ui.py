@@ -154,5 +154,59 @@ class TreeMultiSelectTest(unittest.TestCase):
                          ".view 不该自己滚动（会让内部 flex 子项塌掉）")
 
 
+
+
+class TrashPanelParityTest(unittest.TestCase):
+    """回收站面板与中转站对齐的几条机制(用户反馈"按钮没反应 / 界面不同步")。
+
+    这些是"源码契约",没有接口可测,所以在这里按源码锁住:
+
+      · 两个动作按钮必须标 `data-exclusive` —— `app.js` 靠这个属性在**别的任务
+        在跑时提前禁用**并说明原因。不标的话按钮看着能点,点下去才撞 409,
+        报出来还是"还原失败"(误导),用户的感觉就是"点了没响应"。
+        中转站(`#st-restore` 等)一直是这么标的。
+      · 还原 / 彻底删除都必须走 `App.runExclusive`(受独占位约束),
+        而不是裸调 API。
+      · 忙的时候要有禁用 + 文案,并且 `finally` 一定恢复。
+      · 还原 / 删除之后**原地刷新列表**(`reload()`),不再关窗重开。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        js = (ROOT / "app" / "web" / "static" / "js"
+              / "views.files.js").read_text(encoding="utf-8")
+        i = js.index("async function openTrash")
+        cls.PANEL = js[i:js.index("function crumb()", i)]
+
+    def test_action_buttons_marked_exclusive(self):
+        for bid in ("tr-restore", "tr-purge"):
+            m = re.search(r'<button[^>]*id="%s"[^>]*>' % bid, self.PANEL)
+            self.assertIsNotNone(m, f"没找到按钮 {bid}")
+            self.assertIn("data-exclusive", m.group(0),
+                          f"#{bid} 没标 data-exclusive:别的任务在跑时不会提前禁用,"
+                          f"点下去才撞 409,提示还是'还原失败'"
+                          f"(用户感觉就是'点了没反应')")
+
+    def test_actions_go_through_run_exclusive(self):
+        for call in ("runExclusive('trash', () => API.trashRestore(",
+                     "runExclusive('trash', () => API.trashPurge("):
+            self.assertIn(call, self.PANEL,
+                          "还原 / 彻底删除必须走 App.runExclusive(独占位 + 明确提示)")
+
+    def test_busy_state_disables_and_always_restores(self):
+        seg = self.PANEL[self.PANEL.index("async function run("):]
+        seg = seg[:seg.index("async function doRestore")]
+        self.assertIn("busy = true", seg)
+        self.assertIn("finally", seg)
+        self.assertIn("busy = false", seg)
+        self.assertIn("disabled = busy", self.PANEL,
+                      "忙的时候按钮必须真的禁用")
+
+    def test_refreshes_list_in_place(self):
+        self.assertIn("async function reload(", self.PANEL)
+        self.assertIn("await reload()", self.PANEL,
+                      "还原后要原地刷新列表,不要关窗重开")
+
+
 if __name__ == "__main__":
     unittest.main()

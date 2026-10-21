@@ -1286,7 +1286,9 @@
     //     那种做法每操作一次就要重新找一遍,而且中间那一下很像"按钮没反应";
     //   · 忙的时候按钮明确禁用并显示"还原中...",做完一定恢复(不再出现
     //     "点了没响应");
-    //   · 走 `App.runExclusive`,和别的写操作一样受独占位约束、给出明确提示。
+    //   · 走 `App.runExclusive`,和别的写操作一样受独占位约束、给出明确提示 ——
+    //     两个动作按钮同时标 `data-exclusive`,别的任务在跑时会被**提前禁用**
+    //     并说明原因(中转站就是这么标的),而不是点下去撞 409 报"还原失败"。
     let data = { items: [], bytes: 0, root: '' };
     let filter = '';
     const picked = new Set();
@@ -1400,8 +1402,8 @@
             </select>
           </label>
           <div class="grow"></div>
-          <button class="btn sm primary" id="tr-restore" disabled>还原选中</button>
-          <button class="btn sm" id="tr-purge" disabled>彻底删除...</button>
+          <button class="btn sm primary" id="tr-restore" data-exclusive disabled>还原选中</button>
+          <button class="btn sm" id="tr-purge" data-exclusive disabled>彻底删除...</button>
         </div>
         ${empty ? `<div class="stg-empty">回收站是空的。<br>
           <span class="muted">删除文件时会移到
